@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>Wildfire Intelligence Platform</title>
+    <title>V-mark</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.css" rel="stylesheet" />
@@ -66,6 +66,18 @@
             <input type="checkbox" id="layer-so2" onchange="toggleGas('so2-layer')">
             <span>Sulfur Dioxide (SO₂)</span>
           </label>
+        </div>
+
+        <div class="layer-group">
+          <div class="group-title">
+             <span class="material-icons-round">local_fire_department</span> FIRMS Data Window
+          </div>
+
+          <label class="layer-item" style="display:flex; align-items:center; gap:10px;">
+            <input type="range" id="firms-days" min="1" max="5" step="1" value="1" style="flex:1;">
+            <span id="firms-days-label">1 day</span>
+          </label>
+        
         </div>
 
         <div id="dynamic-legend" class="legend-box" style="display:none;"></div>

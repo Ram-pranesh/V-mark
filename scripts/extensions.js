@@ -1,32 +1,44 @@
 (function() {
     'use strict';
 
+    let mapRef = null;
+
     // Wait for map to be ready
     function waitForMap(callback) {
-        if (typeof map !== 'undefined' && map.loaded && map.loaded()) {
+        const candidate = window.map || (typeof map !== 'undefined' ? map : null);
+        if (candidate && candidate.loaded && candidate.loaded()) {
+            mapRef = candidate;
             callback();
-        } else if (typeof map !== 'undefined') {
-            map.on('load', callback);
+        } else if (candidate) {
+            mapRef = candidate;
+            candidate.on('load', callback);
         } else {
             setTimeout(() => waitForMap(callback), 100);
         }
     }
 
     // Fetch fire data from FIRMS API
+    const FETCH_GLOBAL = false;
+    let currentDays = 1;
+    let isLoading = false;
+    let pendingAbort = null;
+
     async function fetchFireData() {
         const apiKey = CONFIG.FIRMS_MAP_KEY;
+        if (!apiKey) return { type: 'FeatureCollection', features: [] };
         
-        // Get current map bounds to fetch only visible area (more efficient)
-        const bounds = map.getBounds();
-        const west = bounds.getWest().toFixed(2);
-        const south = bounds.getSouth().toFixed(2);
-        const east = bounds.getEast().toFixed(2);
-        const north = bounds.getNorth().toFixed(2);
+        // Use global bounds to fetch all available points when requested
+        const bounds = mapRef.getBounds();
+        const west = (FETCH_GLOBAL ? -180 : bounds.getWest()).toFixed(2);
+        const south = (FETCH_GLOBAL ? -90 : bounds.getSouth()).toFixed(2);
+        const east = (FETCH_GLOBAL ? 180 : bounds.getEast()).toFixed(2);
+        const north = (FETCH_GLOBAL ? 90 : bounds.getNorth()).toFixed(2);
         
         // FIRMS API endpoints for different satellites
         const sources = [
             { id: 'VIIRS_SNPP_NRT', name: 'VIIRS SNPP' },
-            { id: 'VIIRS_NOAA20_NRT', name: 'VIIRS NOAA-20' }
+            { id: 'VIIRS_NOAA20_NRT', name: 'VIIRS NOAA-20' },
+            { id: 'MODIS_NRT', name: 'MODIS Terra/Aqua' }
         ];
         
         let allFeatures = [];
@@ -34,11 +46,16 @@
         for (const source of sources) {
             try {
                 // Use area endpoint with bounding box
-                const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/${source.id}/${west},${south},${east},${north}/1`;
+                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${currentDays}`;
                 
                 console.log(`Fetching ${source.name}...`);
                 
-                const response = await fetch(url);
+                if (pendingAbort) {
+                    pendingAbort.abort();
+                }
+                pendingAbort = new AbortController();
+
+                const response = await fetch(url, { signal: pendingAbort.signal });
                 
                 if (!response.ok) {
                     console.warn(`${source.name}: ${response.status}`);
@@ -49,7 +66,7 @@
                 
                 // Check if it's valid CSV
                 if (text.includes('<!DOCTYPE') || text.includes('<html') || text.length < 50) {
-                    console.warn(`${source.name}: Invalid response`);
+                    console.warn(`${source.name}: Invalid response`, text.slice(0, 200));
                     continue;
                 }
                 
@@ -119,16 +136,16 @@
         const layerId = 'fire-points';
         
         // Update or add source
-        if (map.getSource(sourceId)) {
-            map.getSource(sourceId).setData(geojson);
+        if (mapRef.getSource(sourceId)) {
+            mapRef.getSource(sourceId).setData(geojson);
         } else {
-            map.addSource(sourceId, {
+            mapRef.addSource(sourceId, {
                 type: 'geojson',
                 data: geojson
             });
             
             // Glow effect layer
-            map.addLayer({
+            mapRef.addLayer({
                 id: glowId,
                 type: 'circle',
                 source: sourceId,
@@ -151,7 +168,7 @@
             });
             
             // Main fire points
-            map.addLayer({
+            mapRef.addLayer({
                 id: layerId,
                 type: 'circle',
                 source: sourceId,
@@ -174,7 +191,7 @@
             });
             
             // Click popup
-            map.on('click', layerId, (e) => {
+            mapRef.on('click', layerId, (e) => {
                 const f = e.features[0];
                 const p = f.properties;
                 const coords = f.geometry.coordinates;
@@ -196,14 +213,14 @@
                             </div>
                         </div>
                     `)
-                    .addTo(map);
+                    .addTo(mapRef);
             });
             
-            map.on('mouseenter', layerId, () => {
-                map.getCanvas().style.cursor = 'pointer';
+            mapRef.on('mouseenter', layerId, () => {
+                mapRef.getCanvas().style.cursor = 'pointer';
             });
-            map.on('mouseleave', layerId, () => {
-                map.getCanvas().style.cursor = '';
+            mapRef.on('mouseleave', layerId, () => {
+                mapRef.getCanvas().style.cursor = '';
             });
         }
         
@@ -213,25 +230,52 @@
     // Load fires for current view
     async function loadFires() {
         try {
+            if (isLoading) return;
+            isLoading = true;
             const geojson = await fetchFireData();
             addFireLayer(geojson);
         } catch (err) {
             console.error('Fire load error:', err);
+        } finally {
+            isLoading = false;
         }
     }
 
     // Auto-reload on map move
     let moveTimeout;
     function setupAutoReload() {
-        map.on('moveend', () => {
+        mapRef.on('moveend', () => {
             // Only auto-reload if we already have data
-            if (map.getSource('fire-source')) {
+            if (mapRef.getSource('fire-source')) {
                 clearTimeout(moveTimeout);
                 moveTimeout = setTimeout(() => {
                     console.log(' Reloading fires for new view...');
                     loadFires();
-                }, 1000);
+                }, 1200);
             }
+        });
+    }
+
+    function setupDaysSlider() {
+        const slider = document.getElementById('firms-days');
+        const label = document.getElementById('firms-days-label');
+        if (!slider || !label) return;
+
+        const maxDays = (CONFIG && CONFIG.FIRMS_DAYS_MAX) ? Number(CONFIG.FIRMS_DAYS_MAX) : 5;
+        const defaultDays = (CONFIG && CONFIG.FIRMS_DAYS_DEFAULT) ? Number(CONFIG.FIRMS_DAYS_DEFAULT) : 1;
+        slider.max = String(maxDays);
+        slider.value = String(Math.min(defaultDays, maxDays));
+        currentDays = Number(slider.value);
+        label.textContent = `${currentDays} day${currentDays === 1 ? '' : 's'}`;
+
+        let sliderTimeout;
+        slider.addEventListener('input', () => {
+            currentDays = Number(slider.value);
+            label.textContent = `${currentDays} day${currentDays === 1 ? '' : 's'}`;
+            clearTimeout(sliderTimeout);
+            sliderTimeout = setTimeout(() => {
+                loadFires();
+            }, 600);
         });
     }
 
@@ -239,6 +283,7 @@
     waitForMap(() => {
         console.log('Fire intelligence: initializing...');
         setupAutoReload();
+        setupDaysSlider();
         
         // Auto-load fires on start
         setTimeout(() => {

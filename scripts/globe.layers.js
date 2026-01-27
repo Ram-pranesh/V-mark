@@ -91,16 +91,33 @@
         layout: { visibility: "none" }
     });
 
+    // --- 3. FIRMS Fire Detections (WMS overlay) ---
+    const enableFirmsWms = CONFIG && String(CONFIG.ENABLE_FIRMS_WMS).toLowerCase() === "true";
+    if (CONFIG && CONFIG.FIRMS_MAP_KEY && enableFirmsWms) {
+      const firmsBase = `/firms/wms?format=image/png&transparent=true&height=256&width=256&srs=EPSG:3857`;
+
+      map.addSource("firms-fires", {
+        type: "raster",
+        tiles: [
+          `${firmsBase}&layers=VIIRS_SNPP_NRT&bbox={bbox-epsg-3857}`,
+          `${firmsBase}&layers=VIIRS_NOAA20_NRT&bbox={bbox-epsg-3857}`,
+          `${firmsBase}&layers=MODIS_NRT&bbox={bbox-epsg-3857}`
+        ],
+        tileSize: 256
+      });
+
+      map.addLayer({
+        id: "firms-fires-layer",
+        type: "raster",
+        source: "firms-fires",
+        paint: { "raster-opacity": 0.8 },
+        layout: { visibility: "visible" }
+      });
+    }
+
     // --- 3. Atmosphere ---
-    map.addLayer({
-      id: "sky",
-      type: "sky",
-      paint: {
-        "sky-type": "atmosphere",
-        "sky-atmosphere-sun": [0.0, 0.0],
-        "sky-atmosphere-sun-intensity": 15
-      }
-    });
+    // MapLibre (v5.x) does not support the "sky" layer type.
+    // Leaving this disabled avoids the console error and keeps the map stable.
   }
 
   if (map.loaded && map.loaded()) {
