@@ -49,35 +49,33 @@
 
         <div class="layer-group">
           <div class="group-title">
-             <span class="material-icons-round">science</span> Gas Analysis (S-5P)
-          </div>
-          
-          <label class="layer-item">
-            <input type="checkbox" id="layer-no2" onchange="toggleGas('no2-layer')">
-            <span>Nitrogen Dioxide (NO₂)</span>
-          </label>
-          
-          <label class="layer-item">
-            <input type="checkbox" id="layer-co" onchange="toggleGas('co-layer')">
-            <span>Carbon Monoxide (CO)</span>
-          </label>
-          
-           <label class="layer-item">
-            <input type="checkbox" id="layer-so2" onchange="toggleGas('so2-layer')">
-            <span>Sulfur Dioxide (SO₂)</span>
-          </label>
-        </div>
-
-        <div class="layer-group">
-          <div class="group-title">
-             <span class="material-icons-round">local_fire_department</span> FIRMS Data Window
+            <span class="material-icons-round">warning_amber</span> Risk Factors (FWI Inputs)
           </div>
 
-          <label class="layer-item" style="display:flex; align-items:center; gap:10px;">
-            <input type="range" id="firms-days" min="1" max="5" step="1" value="1" style="flex:1;">
-            <span id="firms-days-label">1 day</span>
-          </label>
-        
+          <div class="dropdown" id="risk-dropdown">
+            <button type="button" class="dropdown-toggle" id="risk-dropdown-toggle">
+              Select Risk Factors
+              <span class="material-icons-round">expand_more</span>
+            </button>
+            <div class="dropdown-menu" id="risk-dropdown-menu">
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="soil-moisture-layer">
+                <span>Soil Moisture (SMAP)</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="lst-layer">
+                <span>Land Surface Temperature</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="terrain-hillshade">
+                <span>Topography (Slope / Elevation)</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="firms-fires-layer">
+                <span>Historical Fire Density (FIRMS)</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div id="dynamic-legend" class="legend-box" style="display:none;"></div>
@@ -157,25 +155,13 @@
 
         map.setLayoutProperty(mapLayerId, 'visibility', checkbox.checked ? 'visible' : 'none');
         updateLegend(mapLayerId, checkbox.checked);
+
+        const riskCheckbox = document.querySelector(`#risk-dropdown-menu input[data-layer-id='${mapLayerId}']`);
+        if (riskCheckbox) {
+          riskCheckbox.checked = checkbox.checked;
+        }
       }
 
-      // Gas Toggle (Mutex Recommended for visibility)
-      function toggleGas(selectedId) {
-        const ids = ['no2-layer', 'co-layer', 'so2-layer'];
-        ids.forEach(id => {
-          if (map.getLayer(id)) {
-            map.setLayoutProperty(id, 'visibility', 'none');
-          }
-          const checkbox = document.getElementById('layer-' + id.replace('-layer', ''));
-          if (checkbox && id !== selectedId) checkbox.checked = false;
-        });
-
-        const selectedCheckbox = document.getElementById('layer-' + selectedId.replace('-layer', ''));
-        if (!selectedCheckbox || !map.getLayer(selectedId)) return;
-        map.setLayoutProperty(selectedId, 'visibility', selectedCheckbox.checked ? 'visible' : 'none');
-        updateLegend(selectedId, selectedCheckbox.checked);
-      }
-      
       function updateLegend(layer, visible) {
          const legend = document.getElementById('dynamic-legend');
          if (!visible) { legend.style.display = 'none'; return; }
@@ -183,9 +169,6 @@
          legend.style.display = 'block';
          if (layer.includes('wind')) legend.innerHTML = '<b>Wind Speed</b><br><span style="background:linear-gradient(90deg, blue, red); display:block; height:8px; width:100%"></span>Low &nbsp;&nbsp;&nbsp; High';
          if (layer.includes('temp')) legend.innerHTML = '<b>Temperature</b><br><span style="background:linear-gradient(90deg, blue, yellow, red); display:block; height:8px; width:100%"></span>-40°C &nbsp;&nbsp; 40°C';
-         if (layer.includes('no2')) legend.innerHTML = '<b>NO₂ Concentration</b><br><span style="background:linear-gradient(90deg, white, orange, brown); display:block; height:8px; width:100%"></span>Low &nbsp;&nbsp; High';
-         if (layer.includes('co')) legend.innerHTML = '<b>CO Level</b><br><span style="background:linear-gradient(90deg, white, gray, black); display:block; height:8px; width:100%"></span>Low &nbsp;&nbsp; High';
-         if (layer.includes('so2')) legend.innerHTML = '<b>SO₂ Concentration</b><br><span style="background:linear-gradient(90deg, white, orange, red); display:block; height:8px; width:100%"></span>Low &nbsp;&nbsp; High';
       }
     </script>
   </body>

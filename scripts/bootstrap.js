@@ -2,8 +2,11 @@
   const scripts = [
     "./scripts/globe.js",
     "./scripts/globe.layers.js",
+    "./scripts/risk-factors/risk-factors.layers.js",
+    "./scripts/risk-factors/risk-factors.ui.js",
     "./scripts/globe.controls.js",
     "./scripts/globe.switcher.js",
+    "./scripts/time.controls.js",
     "./scripts/globe.weather.js",
     "./scripts/globe.coords.js",
     "./scripts/extensions.js"

@@ -37,6 +37,8 @@ def config():
             "FIRMS_DAYS_DEFAULT": int(get_env("FIRMS_DAYS_DEFAULT", "1")),
             "FIRMS_DAYS_MAX": 5,
             "OPENWEATHER_KEY": get_env("OPENWEATHER_KEY"),
+            "SENTINELHUB_INSTANCE_ID": get_env("SENTINELHUB_INSTANCE_ID"),
+            "NASA_EARTHDATA_TOKEN": get_env("NASA_EARTHDATA_TOKEN"),
             "DEFAULT_CENTER": [75, 20],
             "DEFAULT_ZOOM": 2,
             "SENTINEL_WMS_URL": get_env("SENTINEL_WMS_URL", "https://tiles.maps.eox.at/wms"),
@@ -98,6 +100,10 @@ def firms_wms():
         "bbox": bbox,
         "key": api_key,
     }
+
+    time_param = request.args.get("time")
+    if time_param:
+        params["time"] = time_param
 
     try:
         resp = requests.get("https://firms.modaps.eosdis.nasa.gov/wms/", params=params, timeout=30)

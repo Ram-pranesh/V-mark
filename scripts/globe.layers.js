@@ -30,39 +30,6 @@
       map.moveLayer("sentinel-2", "osm-roads");
     }
 
-    // --- 2. GAS INTELLIGENCE (OpenWeatherMap AQI tiles fallback) ---
-    map.addSource("gas-base", {
-      type: "raster",
-      tiles: [
-        `https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=${CONFIG.OPENWEATHER_KEY}`
-      ],
-      tileSize: 256
-    });
-
-    map.addLayer({
-      id: "no2-layer",
-      type: "raster",
-      source: "gas-base",
-      paint: { "raster-opacity": 0.55, "raster-hue-rotate": 160 },
-      layout: { visibility: "none" }
-    });
-
-    map.addLayer({
-      id: "co-layer",
-      type: "raster",
-      source: "gas-base",
-      paint: { "raster-opacity": 0.55, "raster-hue-rotate": 80 },
-      layout: { visibility: "none" }
-    });
-
-    map.addLayer({
-      id: "so2-layer",
-      type: "raster",
-      source: "gas-base",
-      paint: { "raster-opacity": 0.55, "raster-hue-rotate": 220 },
-      layout: { visibility: "none" }
-    });
-    
     // Wind Layer
     map.addSource("weather-wind", {
         type: "raster",
@@ -93,16 +60,26 @@
 
     // --- 3. FIRMS Fire Detections (WMS overlay) ---
     const enableFirmsWms = CONFIG && String(CONFIG.ENABLE_FIRMS_WMS).toLowerCase() === "true";
-    if (CONFIG && CONFIG.FIRMS_MAP_KEY && enableFirmsWms) {
-      const firmsBase = `/firms/wms?format=image/png&transparent=true&height=256&width=256&srs=EPSG:3857`;
+    const firmsBase = `/firms/wms?format=image/png&transparent=true&height=256&width=256&srs=EPSG:3857`;
+
+    const getFirmsTiles = (dateStr) => {
+      const timeParam = dateStr ? `&time=${dateStr}` : "";
+      return [
+        `${firmsBase}&layers=VIIRS_SNPP_NRT&bbox={bbox-epsg-3857}${timeParam}`,
+        `${firmsBase}&layers=VIIRS_NOAA20_NRT&bbox={bbox-epsg-3857}${timeParam}`,
+        `${firmsBase}&layers=MODIS_NRT&bbox={bbox-epsg-3857}${timeParam}`
+      ];
+    };
+
+    const buildFirmsLayer = (dateStr) => {
+      if (!(CONFIG && CONFIG.FIRMS_MAP_KEY && enableFirmsWms)) return;
+
+      if (map.getLayer("firms-fires-layer")) map.removeLayer("firms-fires-layer");
+      if (map.getSource("firms-fires")) map.removeSource("firms-fires");
 
       map.addSource("firms-fires", {
         type: "raster",
-        tiles: [
-          `${firmsBase}&layers=VIIRS_SNPP_NRT&bbox={bbox-epsg-3857}`,
-          `${firmsBase}&layers=VIIRS_NOAA20_NRT&bbox={bbox-epsg-3857}`,
-          `${firmsBase}&layers=MODIS_NRT&bbox={bbox-epsg-3857}`
-        ],
+        tiles: getFirmsTiles(dateStr),
         tileSize: 256
       });
 
@@ -111,9 +88,12 @@
         type: "raster",
         source: "firms-fires",
         paint: { "raster-opacity": 0.8 },
-        layout: { visibility: "visible" }
+        layout: { visibility: "none" }
       });
-    }
+    };
+
+    window.updateFirmsDate = (dateStr) => buildFirmsLayer(dateStr);
+    buildFirmsLayer();
 
     // --- 3. Atmosphere ---
     // MapLibre (v5.x) does not support the "sky" layer type.

@@ -18,17 +18,19 @@
   window.setMapView = setMapView;
 
   const mapSelectorContainer = document.createElement("div");
+  mapSelectorContainer.className = "floating-map-selector";
   Object.assign(mapSelectorContainer.style, {
     position: "absolute",
     top: "15px",
-    right: "140px",
+    right: "180px",
     zIndex: 10,
-    background: "white",
-    border: "1px solid black",
+    background: "#ffffff",
+    border: "1px solid #ffffff",
     borderRadius: "20px",
     padding: "4px 8px",
     display: "flex",
-    alignItems: "center"
+    alignItems: "center",
+    color: "#000000"
   });
   document.body.appendChild(mapSelectorContainer);
 
@@ -46,7 +48,9 @@
     border: "none",
     outline: "none",
     fontSize: "13px",
-    cursor: "pointer"
+    cursor: "pointer",
+    background: "transparent",
+    color: "black"
   });
 
   const options = [

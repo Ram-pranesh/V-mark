@@ -19,7 +19,8 @@
 
     // Fetch fire data from FIRMS API
     const FETCH_GLOBAL = false;
-    let currentDays = 1;
+    const FIRMS_DAYS_WINDOW = 5;
+    let selectedDate = null;
     let isLoading = false;
     let pendingAbort = null;
 
@@ -42,11 +43,12 @@
         ];
         
         let allFeatures = [];
+        const targetDate = selectedDate || new Date().toISOString().split('T')[0];
         
         for (const source of sources) {
             try {
                 // Use area endpoint with bounding box
-                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${currentDays}`;
+                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${FIRMS_DAYS_WINDOW}`;
                 
                 console.log(`Fetching ${source.name}...`);
                 
@@ -70,7 +72,7 @@
                     continue;
                 }
                 
-                const features = csvToGeoJSON(text, source.name);
+                const features = csvToGeoJSON(text, source.name).filter((f) => f.properties.date === targetDate);
                 allFeatures = allFeatures.concat(features);
                 
                 console.log(`${source.name}: ${features.length} records`);
@@ -256,34 +258,15 @@
         });
     }
 
-    function setupDaysSlider() {
-        const slider = document.getElementById('firms-days');
-        const label = document.getElementById('firms-days-label');
-        if (!slider || !label) return;
-
-        const maxDays = (CONFIG && CONFIG.FIRMS_DAYS_MAX) ? Number(CONFIG.FIRMS_DAYS_MAX) : 5;
-        const defaultDays = (CONFIG && CONFIG.FIRMS_DAYS_DEFAULT) ? Number(CONFIG.FIRMS_DAYS_DEFAULT) : 1;
-        slider.max = String(maxDays);
-        slider.value = String(Math.min(defaultDays, maxDays));
-        currentDays = Number(slider.value);
-        label.textContent = `${currentDays} day${currentDays === 1 ? '' : 's'}`;
-
-        let sliderTimeout;
-        slider.addEventListener('input', () => {
-            currentDays = Number(slider.value);
-            label.textContent = `${currentDays} day${currentDays === 1 ? '' : 's'}`;
-            clearTimeout(sliderTimeout);
-            sliderTimeout = setTimeout(() => {
-                loadFires();
-            }, 600);
-        });
-    }
+    window.setFirmsDate = (isoDate) => {
+        selectedDate = isoDate;
+        loadFires();
+    };
 
     // Initialize
     waitForMap(() => {
         console.log('Fire intelligence: initializing...');
         setupAutoReload();
-        setupDaysSlider();
         
         // Auto-load fires on start
         setTimeout(() => {
