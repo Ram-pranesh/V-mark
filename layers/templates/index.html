@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Earth Monitor</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { margin: 0; padding: 0; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #map { width: 100vw; height: 100vh; background: #111; }
+
+        .sidebar {
+            position: absolute; top: 20px; left: 20px; width: 240px;
+            background: rgba(20, 25, 35, 0.95); backdrop-filter: blur(10px);
+            border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1000; padding: 20px; color: white;
+        }
+        .brand { font-size: 16px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        
+        .menu-btn {
+            display: flex; align-items: center; width: 100%; padding: 12px; margin-bottom: 8px;
+            background: transparent; border: 1px solid transparent; color: #aaa; border-radius: 8px;
+            cursor: pointer; transition: 0.3s; font-size: 14px;
+        }
+        .menu-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+        .menu-btn.active { background: #3b82f6; color: white; font-weight: 600; }
+        .menu-btn i { width: 25px; }
+
+        /* TIME SLIDER */
+        #time-controls {
+            margin-top: 20px; padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: none; /* Hidden by default */
+        }
+        .date-display { color: #4ade80; font-weight: bold; display: block; text-align: center; margin-bottom: 10px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .range-labels { display: flex; justify-content: space-between; color: #666; font-size: 10px; }
+        .error-msg { color: #ff4444; font-size: 11px; margin-top: 5px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="brand"><i class="fa-solid fa-earth-americas"></i> EARTH MONITOR</div>
+        
+        <button class="menu-btn active" onclick="setMode('satellite')">
+            <i class="fa-solid fa-satellite"></i> Satellite
+        </button>
+        <button class="menu-btn" onclick="setMode('wind')">
+            <i class="fa-solid fa-wind"></i> Wind History
+        </button>
+        <button class="menu-btn" onclick="setMode('thermal')">
+            <i class="fa-solid fa-fire-flame-curved"></i> Thermal History
+        </button>
+
+        <div id="time-controls">
+            <span class="date-display" id="current-date-label">Today</span>
+            <input type="range" id="day-slider" min="0" max="5" value="0" step="1" onchange="updateData(this.value)">
+            <div class="range-labels">
+                <span>Today</span><span>-5 Days</span>
+            </div>
+            <div id="error-box" class="error-msg">Data file missing for this date</div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.js"></script>
+
+    <script>
+        // --- SETUP ---
+        var map = L.map('map', { center: [20.0, 78.0], zoom: 4, zoomControl: false });
+        var currentMode = 'satellite';
+        
+        // Layers
+        var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+        var darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+        
+        var activeWindLayer = null;
+        var activeThermalLayer = null;
+
+        satellite.addTo(map);
+
+        // --- MODE SWITCHER ---
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // UI
+            document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Slider Visibility: Show for both Wind and Thermal
+            const showSlider = (mode === 'wind' || mode === 'thermal');
+            document.getElementById('time-controls').style.display = showSlider ? 'block' : 'none';
+
+            // Reset Map
+            map.eachLayer(l => map.removeLayer(l));
+
+            if (mode === 'satellite') {
+                satellite.addTo(map);
+            } 
+            else if (mode === 'wind') {
+                satellite.addTo(map);
+                // Load wind for current slider position
+                updateData(document.getElementById('day-slider').value);
+            } 
+            else if (mode === 'thermal') {
+                darkMap.addTo(map);
+                // Load thermal for current slider position
+                updateData(document.getElementById('day-slider').value);
+            }
+        }
+
+        // --- DATA UPDATE LOGIC ---
+        function updateData(daysAgo) {
+            const date = new Date();
+            date.setDate(date.getDate() - parseInt(daysAgo));
+            const dateStr = date.toISOString().split('T')[0];
+            
+            document.getElementById('current-date-label').innerText = (daysAgo == 0) ? "Today" : dateStr;
+            document.getElementById('error-box').style.display = 'none';
+
+            // 1. UPDATE THERMAL (Easy - NASA API)
+            if (currentMode === 'thermal') {
+                if (activeThermalLayer) map.removeLayer(activeThermalLayer);
+                activeThermalLayer = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/${dateStr}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`, { opacity: 0.7 });
+                activeThermalLayer.addTo(map);
+            }
+
+            // 2. UPDATE WIND (Hard - Local Files)
+            if (currentMode === 'wind') {
+                if (activeWindLayer) map.removeLayer(activeWindLayer);
+
+                // LOGIC: Look for 'wind_0.json', 'wind_1.json', etc.
+                // You must name your files exactly like this in your folder!
+                // For the demo to work, we fallback to the global online file if local fails
+                let filename = (daysAgo == 0) ? 'https://onaci.github.io/leaflet-velocity/wind-global.json' : `wind_${daysAgo}.json`;
+
+                console.log("Fetching: " + filename);
+
+                fetch(filename)
+                    .then(r => {
+                        if (!r.ok) throw new Error("File missing");
+                        return r.json();
+                    })
+                    .then(data => {
+                        activeWindLayer = L.velocityLayer({
+                            displayValues: true,
+                            displayOptions: { position: 'bottomright', emptyString: '', velocityType: 'Wind' },
+                            data: data,
+                            maxVelocity: 15,
+                            velocityScale: 0.01
+                        });
+                        activeWindLayer.addTo(map);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        document.getElementById('error-box').style.display = 'block';
+                        document.getElementById('error-box').innerText = `Missing file: wind_${daysAgo}.json`;
+                    });
+            }
+        }
+    </script>
+</body>
+</html>
