@@ -4,6 +4,7 @@ const map = new maplibregl.Map({
   center: CONFIG.DEFAULT_CENTER,
   zoom: CONFIG.DEFAULT_ZOOM,
   maxZoom: 22,
+  hash: false, // Disable default hash to use custom implementation with 6-digit precision
   pitch: 0, // Start flat for better view of global weather
   bearing: 0,
   style: {

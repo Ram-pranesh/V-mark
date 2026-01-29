@@ -1,4 +1,4 @@
-(function() {
+(function () {
     'use strict';
 
     let mapRef = null;
@@ -40,21 +40,21 @@
     async function fetchFireData() {
         const apiKey = CONFIG.FIRMS_MAP_KEY;
         if (!apiKey) return { type: 'FeatureCollection', features: [] };
-        
+
         // Use global bounds to fetch all available points when requested
         const bounds = mapRef.getBounds();
         const west = (FETCH_GLOBAL ? -180 : bounds.getWest()).toFixed(2);
         const south = (FETCH_GLOBAL ? -90 : bounds.getSouth()).toFixed(2);
         const east = (FETCH_GLOBAL ? 180 : bounds.getEast()).toFixed(2);
         const north = (FETCH_GLOBAL ? 90 : bounds.getNorth()).toFixed(2);
-        
+
         // FIRMS API endpoints for different satellites
         const sources = [
             { id: 'VIIRS_SNPP_NRT', name: 'VIIRS SNPP' },
             { id: 'VIIRS_NOAA20_NRT', name: 'VIIRS NOAA-20' },
             { id: 'MODIS_NRT', name: 'MODIS Terra/Aqua' }
         ];
-        
+
         let allFeatures = [];
         const targetDate = clampToWindow(selectedDate || todayIso());
 
@@ -64,37 +64,37 @@
         const picked = new Date(targetDate);
         const diffDays = Math.floor((today - picked) / 86400000);
         const daySpan = Math.min(FIRMS_DAYS_WINDOW, Math.max(1, diffDays + 1));
- 
+
         for (const source of sources) {
             try {
                 // Use area endpoint with bounding box
                 const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${daySpan}`;
-                
+
                 console.log(`Fetching ${source.name}...`);
-                
+
                 if (pendingAbort) pendingAbort.abort();
                 pendingAbort = new AbortController();
 
                 const response = await fetch(url, { signal: pendingAbort.signal });
-                
+
                 if (!response.ok) {
                     console.warn(`${source.name}: ${response.status}`);
                     continue;
                 }
-                
+
                 const text = await response.text();
-                
+
                 // Check if it's valid CSV
                 if (text.includes('<!DOCTYPE') || text.includes('<html') || text.length < 50) {
                     console.warn(`${source.name}: Invalid response`, text.slice(0, 200));
                     continue;
                 }
-                
+
                 const features = csvToGeoJSON(text, source.name).filter((f) => !targetDate || f.properties.date === targetDate);
                 allFeatures = allFeatures.concat(features);
-                
+
                 console.log(`${source.name}: ${features.length} records`);
-                
+
             } catch (err) {
                 if (err.name === 'AbortError') {
                     console.warn(`${source.name}: fetch aborted (new request started)`);
@@ -103,7 +103,7 @@
                 }
             }
         }
-        
+
         return {
             type: 'FeatureCollection',
             features: allFeatures
@@ -114,7 +114,7 @@
     function csvToGeoJSON(csv, source) {
         const lines = csv.trim().split('\n');
         if (lines.length < 2) return [];
-        
+
         const headers = lines[0].toLowerCase().split(',');
         const latIdx = headers.indexOf('latitude');
         const lonIdx = headers.indexOf('longitude');
@@ -123,16 +123,16 @@
         const dateIdx = headers.indexOf('acq_date');
         const timeIdx = headers.indexOf('acq_time');
         const brightIdx = headers.findIndex(h => h.includes('bright'));
-        
+
         const features = [];
-        
+
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(',');
             const lat = parseFloat(cols[latIdx]);
             const lon = parseFloat(cols[lonIdx]);
-            
+
             if (isNaN(lat) || isNaN(lon)) continue;
-            
+
             features.push({
                 type: 'Feature',
                 geometry: {
@@ -149,7 +149,7 @@
                 }
             });
         }
-        
+
         return features;
     }
 
@@ -158,7 +158,7 @@
         const sourceId = 'fire-source';
         const glowId = 'fire-glow';
         const layerId = 'fire-points';
-        
+
         // Update or add source
         if (mapRef.getSource(sourceId)) {
             mapRef.getSource(sourceId).setData(geojson);
@@ -167,7 +167,7 @@
                 type: 'geojson',
                 data: geojson
             });
-            
+
             // Glow effect layer
             mapRef.addLayer({
                 id: glowId,
@@ -190,7 +190,7 @@
                     'circle-opacity': 0.5
                 }
             });
-            
+
             // Main fire points
             mapRef.addLayer({
                 id: layerId,
@@ -213,33 +213,54 @@
                     'circle-stroke-color': '#fff'
                 }
             });
-            
+
             // Click popup
             mapRef.on('click', layerId, (e) => {
                 const f = e.features[0];
                 const p = f.properties;
                 const coords = f.geometry.coordinates;
-                
+
                 new maplibregl.Popup()
                     .setLngLat(coords)
                     .setHTML(`
-                        <div style="font-family: system-ui; min-width: 180px;">
-                            <div style="font-weight: 600; color: #ff4500; margin-bottom: 8px; font-size: 14px;">
-                                 Fire Detected
+                        <div style="font-family: system-ui; min-width: 200px;">
+                            <div style="background: #e7e7e7; padding: 6px 10px; border-radius: 6px 6px 0 0; border-bottom: 2px solid #ff4500; font-weight: 700; color: #d35400; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+                                 <span>Fire Detected</span>
+                                 <span style="font-size: 10px; background: #ff4500; color: #fff; padding: 2px 6px; border-radius: 4px;">Active</span>
                             </div>
-                            <div style="font-size: 12px; line-height: 1.6; color: #333;">
-                                <b>Intensity:</b> ${p.frp} MW<br>
-                                <b>Confidence:</b> ${p.confidence}<br>
-                                <b>Source:</b> ${p.source}<br>
-                                <b>Date:</b> ${p.date}<br>
-                                <b>Time:</b> ${p.time} UTC<br>
-                                <b>Location:</b> ${coords[1].toFixed(4)}°, ${coords[0].toFixed(4)}°
+                            <div style="background: #fff; padding: 10px; border-radius: 0 0 6px 6px; font-size: 12px; line-height: 1.6; color: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                <div style="margin-bottom: 6px;">
+                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Intensity:</span>
+                                    <b style="color: #000;">${p.frp} MW</b>
+                                </div>
+                                <div style="margin-bottom: 6px;">
+                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Confidence:</span>
+                                    <b>${p.confidence}</b>
+                                </div>
+                                <div style="margin-bottom: 6px;">
+                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Brightness:</span>
+                                    <b>${p.brightness} K</b>
+                                </div>
+                                <div style="margin-bottom: 6px;">
+                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Source:</span>
+                                    <b>${p.source}</b>
+                                </div>
+                                <hr style="border: 0; border-top: 1px solid #eee; margin: 8px 0;">
+                                <div style="margin-bottom: 4px;">
+                                    <span style="color: #666;">Date:</span> ${p.date}
+                                </div>
+                                <div style="margin-bottom: 4px;">
+                                    <span style="color: #666;">Time:</span> ${p.time} UTC
+                                </div>
+                                <div>
+                                    <span style="color: #666;">Location:</span> <a href="#" style="color: #3498db; text-decoration: none;">${coords[1].toFixed(4)}°, ${coords[0].toFixed(4)}°</a>
+                                </div>
                             </div>
                         </div>
                     `)
                     .addTo(mapRef);
             });
-            
+
             mapRef.on('mouseenter', layerId, () => {
                 mapRef.getCanvas().style.cursor = 'pointer';
             });
@@ -247,7 +268,7 @@
                 mapRef.getCanvas().style.cursor = '';
             });
         }
-        
+
         return geojson.features.length;
     }
 
@@ -289,12 +310,12 @@
     waitForMap(() => {
         console.log('Fire intelligence: initializing...');
         setupAutoReload();
-        
+
         // Auto-load fires on start
         setTimeout(() => {
             loadFires();
         }, 1000);
-        
+
         console.log('Fire intelligence: ready. Open the sidebar for controls.');
     });
 

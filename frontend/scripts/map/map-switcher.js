@@ -32,31 +32,54 @@
     alignItems: "center",
     color: "#000000"
   });
+  // Enforce 3D Globe mode
+  map.setProjection({ type: "globe" });
+  map.setTerrain({ source: "terrainSource", exaggeration: 1.5 });
+  map.easeTo({ pitch: 0 });
   document.body.appendChild(mapSelectorContainer);
 
   const mapIcon = document.createElement("img");
-  mapIcon.src = "./assets/img/map-icon.png";
+  mapIcon.src = "./assets/img/image.png"; // User provided transparent image
   mapIcon.style.width = "24px";
   mapIcon.style.height = "24px";
   mapIcon.style.objectFit = "cover";
   mapIcon.style.borderRadius = "4px";
-  mapIcon.style.marginRight = "10px";
+  mapIcon.style.marginRight = "6px";
   mapSelectorContainer.appendChild(mapIcon);
+
+  const labelSpan = document.createElement("span");
+  labelSpan.textContent = "Layers";
+  labelSpan.style.marginRight = "8px";
+  labelSpan.style.fontSize = "13px";
+  labelSpan.style.fontWeight = "600";
+  mapSelectorContainer.appendChild(labelSpan);
 
   const mapSelect = document.createElement("select");
   Object.assign(mapSelect.style, {
-    border: "none",
+    border: "1px solid #ff6b35",
     outline: "none",
     fontSize: "13px",
     cursor: "pointer",
-    background: "transparent",
-    color: "black"
+    background: "#222",
+    color: "#fff",
+    padding: "4px",
+    borderRadius: "4px",
+    width: "auto", // Auto width to fit content
+    minWidth: "100px"
+  });
+
+  // Apply container styles for the theme
+  Object.assign(mapSelectorContainer.style, {
+    background: "#222",
+    border: "1px solid #444",
+    color: "#fff"
   });
 
   const options = [
     { val: "satellite", text: "Satellite" },
-    { val: "roadmap", text: "Roadmap Overlay" },
-    { val: "contours", text: "Terrain Contours" },
+    { val: "roadmap", text: "Roadmap" },
+    { val: "contours", text: "Terrain" },
+    // "below that there are all three layers" - Listing them clearly
   ];
 
   options.forEach((opt) => {

@@ -4,9 +4,8 @@
   if (!map) return;
 
   map.on("click", async (e) => {
-    // Always active if sidebar is open, or we can check specific layers
-    // For now, let's make it active always to inspect any point
-    
+    // Show weather popup unless measuring or routing is currently active
+    if (window.measuring === true || window.routing === true) return;
     const lat = e.lngLat.lat;
     const lng = e.lngLat.lng;
 
@@ -77,7 +76,6 @@
           </div>
         </div>
       `;
-
       popup.setHTML(htmlContent);
 
     } catch (err) {
