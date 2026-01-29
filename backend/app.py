@@ -15,11 +15,23 @@ def get_env(name, default=""):
     return value if value is not None else ""
 
 
+# Simple in-memory cache for WMS tiles
+wms_cache = {}
+MAX_CACHE_SIZE = 1000
+
 @app.after_request
-def add_no_cache_headers(response):
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
+def add_cache_headers(response):
+    # Allow caching for WMS images and static assets to improve performance
+    if request.path.startswith("/firms/wms") or request.path.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+        response.headers["Cache-Control"] = "public, max-age=3600" # Cache for 1 hour
+        response.headers.pop("Pragma", None)
+        response.headers.pop("Expires", None)
+    else:
+        # Default no-cache for API/dynamic data
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
@@ -90,6 +102,17 @@ def firms_wms():
     if not layers or not bbox:
         return jsonify({"error": "Missing required query params"}), 400
 
+    # Create a simple cache key from relevant params
+    width = request.args.get("width", "256")
+    height = request.args.get("height", "256")
+    time_param = request.args.get("time", "")
+    
+    cache_key = f"{layers}_{bbox}_{width}_{height}_{time_param}"
+    
+    if cache_key in wms_cache:
+        cached_data, cached_code, cached_type = wms_cache[cache_key]
+        return cached_data, cached_code, {"Content-Type": cached_type, "X-Cache": "HIT"}
+
     params = {
         "service": request.args.get("service", "WMS"),
         "request": request.args.get("request", "GetMap"),
@@ -97,8 +120,8 @@ def firms_wms():
         "styles": request.args.get("styles", ""),
         "format": request.args.get("format", "image/png"),
         "transparent": request.args.get("transparent", "true"),
-        "height": request.args.get("height", "256"),
-        "width": request.args.get("width", "256"),
+        "height": height,
+        "width": width,
         "srs": request.args.get("srs", "EPSG:3857"),
         "layers": layers,
         "bbox": bbox,
@@ -108,7 +131,6 @@ def firms_wms():
         "key": api_key,
     }
 
-    time_param = request.args.get("time")
     if time_param:
         params["time"] = time_param
 
@@ -119,7 +141,14 @@ def firms_wms():
         return jsonify({"error": "FIRMS WMS request failed", "details": str(exc)}), 502
 
     content_type = resp.headers.get("Content-Type", "application/octet-stream")
-    return resp.content, resp.status_code, {"Content-Type": content_type}
+    
+    # Store in cache if successful
+    if resp.status_code == 200:
+        if len(wms_cache) > MAX_CACHE_SIZE:
+             wms_cache.clear() # Simple clearance strategy
+        wms_cache[cache_key] = (resp.content, resp.status_code, content_type)
+    
+    return resp.content, resp.status_code, {"Content-Type": content_type, "X-Cache": "MISS"}
 
 
 @app.get("/sentinelhub/token")
