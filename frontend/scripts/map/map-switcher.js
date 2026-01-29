@@ -3,7 +3,7 @@
   if (!map) return;
 
   function setMapView(mode) {
-    const overlays = ["osm-roads", "contours-layer"];
+    const overlays = ["osm-roads", "contours-layer", "terrain-hillshade"];
     overlays.forEach((id) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
     });
@@ -35,7 +35,7 @@
   document.body.appendChild(mapSelectorContainer);
 
   const mapIcon = document.createElement("img");
-  mapIcon.src = "map icon.png";
+  mapIcon.src = "./assets/img/map-icon.png";
   mapIcon.style.width = "24px";
   mapIcon.style.height = "24px";
   mapIcon.style.objectFit = "cover";
@@ -70,6 +70,7 @@
 
   mapSelect.onchange = () => {
     setMapView(mapSelect.value);
+    if (window.syncFireVisibility) window.syncFireVisibility();
   };
 
   window.mapSelect = mapSelect;

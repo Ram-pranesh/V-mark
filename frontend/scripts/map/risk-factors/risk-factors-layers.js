@@ -45,11 +45,28 @@
       layout: { visibility: "none" }
     });
 
-    if (map.getSource("terrainSource") && !map.getLayer("terrain-hillshade")) {
+    map.addSource("ndvi-source", {
+      type: "raster",
+      tiles: [
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_16Day/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png?time=${gibsDate}`
+      ],
+      tileSize: 256,
+      maxzoom: 7
+    });
+
+    map.addLayer({
+      id: "ndvi-layer",
+      type: "raster",
+      source: "ndvi-source",
+      paint: { "raster-opacity": 0.65 },
+      layout: { visibility: "none" }
+    });
+
+    if (map.getSource("terrainSourceHillshade") && !map.getLayer("terrain-hillshade")) {
       map.addLayer({
         id: "terrain-hillshade",
         type: "hillshade",
-        source: "terrainSource",
+        source: "terrainSourceHillshade",
         layout: { visibility: "none" },
         paint: {
           "hillshade-exaggeration": 0.7,

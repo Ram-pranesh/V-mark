@@ -64,16 +64,10 @@
     });
   });
 
-  const sentinelConfigured = CONFIG && CONFIG.SENTINELHUB_INSTANCE_ID;
   const firmsConfigured = CONFIG && CONFIG.FIRMS_MAP_KEY;
 
   riskCheckboxes.forEach((checkbox) => {
     const layerId = checkbox.dataset.layerId;
-    if ((layerId === "ndmi-layer" || layerId === "ndvi-layer") && !sentinelConfigured) {
-      checkbox.disabled = true;
-      checkbox.parentElement.title = "Set SENTINELHUB_INSTANCE_ID in .env";
-    }
-
     if (layerId === "firms-fires-layer" && !firmsConfigured) {
       checkbox.disabled = true;
       checkbox.parentElement.title = "Set FIRMS_MAP_KEY in .env";

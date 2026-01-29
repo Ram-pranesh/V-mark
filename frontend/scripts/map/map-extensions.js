@@ -19,8 +19,21 @@
 
     // Fetch fire data from FIRMS API
     const FETCH_GLOBAL = false;
-    const FIRMS_DAYS_WINDOW = 5;
-    let selectedDate = null;
+    const FIRMS_DAYS_WINDOW = 5; // max lookback days allowed by the UI
+    const todayIso = () => new Date().toISOString().split('T')[0];
+    const clampToWindow = (iso) => {
+        if (!iso) return todayIso();
+        const today = new Date();
+        const earliest = new Date();
+        earliest.setDate(today.getDate() - (FIRMS_DAYS_WINDOW - 1));
+        const picked = new Date(iso);
+        if (Number.isNaN(picked.getTime())) return todayIso();
+        if (picked > today) return todayIso();
+        if (picked < earliest) return earliest.toISOString().split('T')[0];
+        return iso;
+    };
+
+    let selectedDate = todayIso();
     let isLoading = false;
     let pendingAbort = null;
 
@@ -43,18 +56,23 @@
         ];
         
         let allFeatures = [];
-        const targetDate = selectedDate || new Date().toISOString().split('T')[0];
-        
+        const targetDate = clampToWindow(selectedDate || todayIso());
+
+        // FIRMS "days" is relative to today, not an absolute date.
+        // Request only as many days as needed to include the chosen date, then filter to that date client-side.
+        const today = new Date();
+        const picked = new Date(targetDate);
+        const diffDays = Math.floor((today - picked) / 86400000);
+        const daySpan = Math.min(FIRMS_DAYS_WINDOW, Math.max(1, diffDays + 1));
+ 
         for (const source of sources) {
             try {
                 // Use area endpoint with bounding box
-                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${FIRMS_DAYS_WINDOW}`;
+                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${daySpan}`;
                 
                 console.log(`Fetching ${source.name}...`);
                 
-                if (pendingAbort) {
-                    pendingAbort.abort();
-                }
+                if (pendingAbort) pendingAbort.abort();
                 pendingAbort = new AbortController();
 
                 const response = await fetch(url, { signal: pendingAbort.signal });
@@ -72,13 +90,17 @@
                     continue;
                 }
                 
-                const features = csvToGeoJSON(text, source.name).filter((f) => f.properties.date === targetDate);
+                const features = csvToGeoJSON(text, source.name).filter((f) => !targetDate || f.properties.date === targetDate);
                 allFeatures = allFeatures.concat(features);
                 
                 console.log(`${source.name}: ${features.length} records`);
                 
             } catch (err) {
-                console.error(`${source.name}:`, err.message);
+                if (err.name === 'AbortError') {
+                    console.warn(`${source.name}: fetch aborted (new request started)`);
+                } else {
+                    console.error(`${source.name}:`, err.message);
+                }
             }
         }
         
@@ -259,7 +281,7 @@
     }
 
     window.setFirmsDate = (isoDate) => {
-        selectedDate = isoDate;
+        selectedDate = clampToWindow(isoDate);
         loadFires();
     };
 

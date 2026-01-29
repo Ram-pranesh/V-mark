@@ -30,6 +30,16 @@ const map = new maplibregl.Map({
         maxzoom: 15,
         attribution: "AWS Terrain Tiles"
       },
+      terrainSourceHillshade: {
+        type: "raster-dem",
+        tiles: [
+          "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+        ],
+        encoding: "terrarium",
+        tileSize: 256,
+        maxzoom: 15,
+        attribution: "AWS Terrain Tiles"
+      },
       // 3. Roads Overlay
       osmRoads: {
         type: "raster",
@@ -68,13 +78,14 @@ const map = new maplibregl.Map({
         id: "contours-layer",
         type: "raster",
         source: "contours",
-        paint: { "raster-opacity": 1 },
+        paint: {
+          "raster-opacity": 1
+        },
         layout: { visibility: "none" }
       }
     ],
-    terrain: {
-      source: "terrainSource",
-      exaggeration: 1.2
+    projection: {
+      type: "globe"
     }
   }
 });

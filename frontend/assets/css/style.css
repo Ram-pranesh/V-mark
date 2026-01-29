@@ -28,6 +28,28 @@ body {
     width: calc(100vw - var(--sidebar-width));
 }
 
+#wind-history-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 100vw;
+    display: none;
+    background: #000;
+}
+
+#wind-history-container.sidebar-open {
+    margin-left: var(--sidebar-width);
+    width: calc(100vw - var(--sidebar-width));
+}
+
+#wind-history-frame {
+    border: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
 #coords {
     position: absolute;
     top: 20px;

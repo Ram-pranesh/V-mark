@@ -4,9 +4,10 @@ import requests
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-app = Flask(__name__, static_folder=BASE_DIR, static_url_path="")
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 
 
 def get_env(name, default=""):
@@ -19,12 +20,15 @@ def add_no_cache_headers(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     return response
 
 
 @app.get("/")
 def index():
-    return send_from_directory(BASE_DIR, "index.html")
+    return app.send_static_file("index.html")
 
 
 @app.get("/config")
@@ -32,7 +36,7 @@ def config():
     return jsonify(
         {
             "FIRMS_MAP_KEY": get_env("FIRMS_MAP_KEY"),
-            "FIRMS_WMS_URL": get_env("FIRMS_WMS_URL", "https://firms.modaps.eosdis.nasa.gov/wms/"),
+            "FIRMS_WMS_URL": get_env("FIRMS_WMS_URL", "/firms/wms/"),
             "ENABLE_FIRMS_WMS": get_env("ENABLE_FIRMS_WMS", "false"),
             "FIRMS_DAYS_DEFAULT": int(get_env("FIRMS_DAYS_DEFAULT", "1")),
             "FIRMS_DAYS_MAX": 5,
@@ -98,6 +102,9 @@ def firms_wms():
         "srs": request.args.get("srs", "EPSG:3857"),
         "layers": layers,
         "bbox": bbox,
+        # FIRMS WMS accepts MAP_KEY; include lowercase variant for compatibility
+        "MAP_KEY": api_key,
+        "map_key": api_key,
         "key": api_key,
     }
 
@@ -106,7 +113,8 @@ def firms_wms():
         params["time"] = time_param
 
     try:
-        resp = requests.get("https://firms.modaps.eosdis.nasa.gov/wms/", params=params, timeout=30)
+        # Use mapserver endpoint which is documented for FIRMS WMS
+        resp = requests.get("https://firms.modaps.eosdis.nasa.gov/mapserver/wms/", params=params, timeout=45)
     except requests.RequestException as exc:
         return jsonify({"error": "FIRMS WMS request failed", "details": str(exc)}), 502
 
@@ -136,7 +144,7 @@ def sentinelhub_token():
 
 @app.get("/<path:filename>")
 def static_files(filename):
-    return send_from_directory(BASE_DIR, filename)
+    return send_from_directory(app.static_folder, filename)
 
 
 if __name__ == "__main__":

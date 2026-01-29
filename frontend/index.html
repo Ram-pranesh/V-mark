@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>V-mark</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <script src="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.js"></script>
+    <link rel="stylesheet" href="./assets/css/style.css" />
+  </head>
+  <body>
+    <div id="sidebar" class="open">
+      <div class="sidebar-header">
+        <h2><span class="material-icons-round">local_fire_department</span> Command Center</h2>
+      </div>
+      
+      <div class="sidebar-content">
+        <div class="layer-group">
+          <div class="group-title">
+             <span class="material-icons-round">satellite_alt</span> Satellite Feeds
+          </div>
+          
+          <label class="layer-item">
+            <input type="checkbox" id="sat-arcgis" checked onchange="toggleSatellite('arcgis')">
+            <span>ArcGIS World Imagery</span>
+          </label>
+          
+          <label class="layer-item">
+            <input type="checkbox" id="sat-sentinel" onchange="toggleSatellite('sentinel')">
+            <span>ESA Sentinel-2</span>
+          </label>
+        </div>
+
+        <div class="layer-group">
+          <div class="group-title">
+             <span class="material-icons-round">air</span> Atmospheric
+          </div>
+          
+          <label class="layer-item">
+            <input type="checkbox" id="layer-wind" onchange="toggleLayer('wind-layer')">
+            <span>Wind Speed</span>
+          </label>
+          
+          <label class="layer-item">
+            <input type="checkbox" id="layer-temp" onchange="toggleLayer('temp-layer')">
+            <span>Global Temperature</span>
+          </label>
+        </div>
+
+        <div class="layer-group">
+          <div class="group-title">
+            <span class="material-icons-round">warning_amber</span> Risk Factors (FWI Inputs)
+          </div>
+
+          <div class="dropdown" id="risk-dropdown">
+            <button type="button" class="dropdown-toggle" id="risk-dropdown-toggle">
+              Select Risk Factors
+              <span class="material-icons-round">expand_more</span>
+            </button>
+            <div class="dropdown-menu" id="risk-dropdown-menu">
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="soil-moisture-layer">
+                <span>Low Soil Moisture (SMAP)</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="ndvi-layer">
+                <span>Dry Vegetation (NDVI)</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="lst-layer">
+                <span>Land Surface Temperature</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" data-layer-id="firms-fires-layer">
+                <span>Historical Fire Density (FIRMS)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="dynamic-legend" class="legend-box" style="display:none;"></div>
+
+      </div>
+    </div>
+
+    <button id="sidebar-toggle" onclick="toggleSidebar()" class="open" aria-label="Close sidebar">
+      <span id="sidebar-toggle-icon" class="material-icons-round">menu_open</span>
+    </button>
+    
+    <div id="map" class="sidebar-open"></div>
+    <div id="temp-tooltip" style="position: absolute; display: none; background: rgba(10, 10, 10, 0.85); color: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px; pointer-events: none; z-index: 100; backdrop-filter: blur(6px); box-shadow: 0 8px 32px rgba(0,0,0,0.5);"></div>
+    <div id="wind-history-container" class="sidebar-open">
+      <iframe id="wind-history-frame" src="./scripts/wind-history.html" title="Wind History"></iframe>
+    </div>
+    <div id="coords" class="sidebar-open"></div>
+
+    <script src="./scripts/app-bootstrap.js"></script>
+    
+    <script>
+      function toggleSidebar() {
+        const sidebar = document.getElementById("sidebar");
+        const mapEl = document.getElementById("map");
+        const windHistory = document.getElementById("wind-history-container");
+        const coords = document.getElementById("coords");
+        const toggle = document.getElementById("sidebar-toggle");
+        const icon = document.getElementById("sidebar-toggle-icon");
+
+        sidebar.classList.toggle("open");
+        mapEl.classList.toggle("sidebar-open");
+        windHistory.classList.toggle("sidebar-open");
+        coords.classList.toggle("sidebar-open");
+        toggle.classList.toggle("open");
+
+        const isOpen = sidebar.classList.contains("open");
+        icon.textContent = isOpen ? "menu_open" : "menu";
+        toggle.setAttribute("aria-label", isOpen ? "Close sidebar" : "Open sidebar");
+
+        // Call resize after transition completes
+        setTimeout(() => {
+          if (window.map && typeof map.resize === 'function') map.resize();
+        }, 350);
+      }
+
+      function setWindHistoryVisible(visible) {
+        const windHistory = document.getElementById("wind-history-container");
+        const mapEl = document.getElementById("map");
+        const coords = document.getElementById("coords");
+        const terrainToggle = document.querySelector(".floating-terrain-toggle");
+        const mapSelector = document.querySelector(".floating-map-selector");
+
+        if (!windHistory || !mapEl || !coords) return;
+        windHistory.style.display = visible ? "block" : "none";
+        mapEl.style.display = "block";
+        coords.style.display = "block";
+        if (terrainToggle) terrainToggle.style.display = "flex";
+        if (mapSelector) mapSelector.style.display = "flex";
+        if (window.map && map.resize) map.resize();
+      }
+
+      // Satellite Mutex Logic
+      function toggleSatellite(selected) {
+        const arcgis = document.getElementById('sat-arcgis');
+        const sentinel = document.getElementById('sat-sentinel');
+        if (selected === 'arcgis') {
+          if (arcgis.checked) {
+             sentinel.checked = false;
+           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'visible');
+           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'none');
+          } else {
+             // Prevent unchecking both (fallback to base)
+             arcgis.checked = true;
+          }
+        } else {
+          if (sentinel.checked) {
+             arcgis.checked = false;
+           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'visible');
+           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'none');
+          } else {
+             arcgis.checked = true;
+           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'visible');
+           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'none');
+          }
+        }
+
+        syncFireVisibility();
+
+      }
+
+      // Generic Layer Toggle
+      function toggleLayer(mapLayerId) {
+        const domId = 'layer-' + mapLayerId.replace('-layer', '');
+        const checkbox = document.getElementById(domId);
+        if (!checkbox) return;
+
+        // Atmospheric layers should be mutually exclusive
+        if (mapLayerId === 'wind-layer' || mapLayerId === 'temp-layer') {
+          const otherId = mapLayerId === 'wind-layer' ? 'temp-layer' : 'wind-layer';
+          const otherCheckbox = document.getElementById('layer-' + otherId.replace('-layer', ''));
+          if (otherCheckbox) otherCheckbox.checked = false;
+        }
+
+        if (mapLayerId === 'wind-layer') {
+          const tempCheckbox = document.getElementById('layer-temp');
+          if (tempCheckbox) tempCheckbox.checked = false;
+          if (map.getLayer('temp-layer')) map.setLayoutProperty('temp-layer', 'visibility', 'none');
+          updateLegend('temp-layer', false);
+          const tooltip = document.getElementById('temp-tooltip');
+          if (tooltip) tooltip.style.display = 'none';
+
+          setWindHistoryVisible(checkbox.checked);
+          if (map.getLayer('wind-layer')) map.setLayoutProperty('wind-layer', 'visibility', checkbox.checked ? 'visible' : 'none');
+          const arcgis = document.getElementById('sat-arcgis');
+          const sentinel = document.getElementById('sat-sentinel');
+          if (arcgis && sentinel && !arcgis.checked && !sentinel.checked) {
+            arcgis.checked = true;
+          }
+          if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', arcgis && arcgis.checked ? 'visible' : 'none');
+          if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', sentinel && sentinel.checked ? 'visible' : 'none');
+          syncFireVisibility();
+          updateLegend(mapLayerId, checkbox.checked);
+          return;
+        }
+
+        if (mapLayerId === 'temp-layer') {
+          setWindHistoryVisible(false);
+          const windCheckbox = document.getElementById('layer-wind');
+          if (windCheckbox) windCheckbox.checked = false;
+          updateLegend('wind-layer', false);
+          if (map.getLayer('wind-layer')) map.setLayoutProperty('wind-layer', 'visibility', 'none');
+          if (checkbox.checked) {
+            // Show temperature overlay on top of the active satellite
+            const arcgis = document.getElementById('sat-arcgis');
+            const sentinel = document.getElementById('sat-sentinel');
+            if (arcgis && sentinel && !arcgis.checked && !sentinel.checked) {
+              arcgis.checked = true;
+            }
+            if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', arcgis && arcgis.checked ? 'visible' : 'none');
+            if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', sentinel && sentinel.checked ? 'visible' : 'none');
+            if (map.getLayer('temp-layer')) map.setLayoutProperty('temp-layer', 'visibility', 'visible');
+            setupTempTooltip();
+            syncFireVisibility();
+          } else {
+            // Hide temperature overlay, keep active satellite
+            const arcgis = document.getElementById('sat-arcgis');
+            const sentinel = document.getElementById('sat-sentinel');
+            if (arcgis && sentinel && !arcgis.checked && !sentinel.checked) {
+              arcgis.checked = true;
+            }
+            if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', arcgis && arcgis.checked ? 'visible' : 'none');
+            if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', sentinel && sentinel.checked ? 'visible' : 'none');
+            if (map.getLayer('temp-layer')) map.setLayoutProperty('temp-layer', 'visibility', 'none');
+            const tooltip = document.getElementById('temp-tooltip');
+            if (tooltip) tooltip.style.display = 'none';
+            syncFireVisibility();
+          }
+          updateLegend(mapLayerId, checkbox.checked);
+          return;
+        }
+
+        // For other layers
+        if (!window.map || !map.getLayer || !map.getLayer(mapLayerId)) return;
+        map.setLayoutProperty(mapLayerId, 'visibility', checkbox.checked ? 'visible' : 'none');
+        updateLegend(mapLayerId, checkbox.checked);
+      }
+
+      // Fire visibility only on satellite feeds and when temperature overlay is off
+      function syncFireVisibility() {
+        const tempOn = document.getElementById('layer-temp')?.checked;
+        const arcgis = document.getElementById('sat-arcgis');
+        const sentinel = document.getElementById('sat-sentinel');
+        const mapMode = window.mapSelect ? window.mapSelect.value : 'satellite';
+        const show = !tempOn && mapMode === 'satellite' && ((arcgis && arcgis.checked) || (sentinel && sentinel.checked));
+        ['fire-glow','fire-points','firms-fires-layer'].forEach((id) => {
+          if (map.getLayer && map.getLayer(id)) {
+            map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none');
+          }
+        });
+      }
+
+      function updateLegend(layer, visible) {
+         const legend = document.getElementById('dynamic-legend');
+         if (!visible) { legend.style.display = 'none'; return; }
+         
+         legend.style.display = 'block';
+        if (layer.includes('wind')) legend.innerHTML = '<b>Wind Speed</b><br><span style="background:linear-gradient(90deg, #5b00a5 0%, #7516c7 14%, #3b5fff 28%, #1fa4ff 42%, #1dd2b7 56%, #7ddc3a 70%, #f2e30c 82%, #ff9a00 91%, #ff2f00 100%); display:block; height:10px; width:100%; border-radius:4px;"></span><div style="display:flex; justify-content:space-between; font-size:12px; margin-top:4px;"><span>Low</span><span>High</span></div>';
+        if (layer.includes('temp')) legend.innerHTML = '<b>Temperature</b><br><span style="background:linear-gradient(90deg, #5b00a5 0%, #7a1fcf 12%, #3657ff 24%, #1fa4ff 36%, #18d17c 48%, #c2e51b 60%, #ffd400 72%, #ff9a00 84%, #ff2f00 100%); display:block; height:10px; width:100%; border-radius:4px;"></span><div style="display:flex; justify-content:space-between; font-size:12px; margin-top:4px;"><span>-40°C</span><span>40°C</span></div>';
+      }
+
+      // Setup temperature tooltip for main map
+      function setupTempTooltip() {
+        const tooltip = document.getElementById('temp-tooltip');
+        let timer;
+        let lastRequestId = 0;
+
+        map.on('mousemove', (e) => {
+          const tempCheckbox = document.getElementById('layer-temp');
+          if (!tempCheckbox || !tempCheckbox.checked) {
+            tooltip.style.display = 'none';
+            return;
+          }
+
+          const rect = map.getContainer().getBoundingClientRect();
+          tooltip.style.display = 'block';
+          tooltip.style.left = (rect.left + e.point.x + 6) + 'px';
+          tooltip.style.top = (rect.top + e.point.y + 6) + 'px';
+          tooltip.style.transform = 'none';
+          
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            const requestId = ++lastRequestId;
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${e.lngLat.lat}&longitude=${e.lngLat.lng}&current=temperature_2m`)
+            .then(res => res.json())
+            .then(data => {
+              if (requestId !== lastRequestId) return; // drop stale responses
+              if (data.current) {
+                tooltip.innerHTML = `<div style="font-weight:bold; font-size:16px;">${Math.round(data.current.temperature_2m)}°C</div>`;
+              }
+            })
+            .catch(() => {});
+          }, 100);
+        });
+        
+        map.on('mouseout', () => tooltip.style.display = 'none');
+      }
+
+    </script>
+  </body>
+</html>
