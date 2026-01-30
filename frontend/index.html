@@ -11,6 +11,7 @@
     rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
   <script src="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
   <link rel="stylesheet" href="./assets/css/style.css" />
 </head>
 
@@ -88,7 +89,25 @@
         </div>
       </div>
 
-      <div id="dynamic-legend" class="legend-box" style="display:none;"></div>
+      <div class="layer-group">
+        <div class="group-title">
+          <span class="material-icons-round">settings_system_daydream</span> System
+        </div>
+
+        <div class="layer-item" onclick="alert('Notification Alert System - No notifications')">
+          <span class="material-icons-round"
+            style="margin-right:12px; font-size:20px; color:#ff6b35;">notifications_none</span>
+          <span>Alert System</span>
+        </div>
+
+        <div class="layer-item" onclick="window.location.href='./drone-mode/index.html'">
+          <span class="material-icons-round"
+            style="margin-right:12px; font-size:20px; color:#4aa8ff;">flight_takeoff</span>
+          <span>Switch to Drone Mode</span>
+        </div>
+      </div>
+
+
 
     </div>
   </div>
@@ -105,6 +124,7 @@
     <iframe id="wind-history-frame" src="./scripts/wind-history.html" title="Wind History"></iframe>
   </div>
   <div id="coords" class="sidebar-open"></div>
+  <div id="dynamic-legend" class="legend-box" style="display:none;"></div>
 
   <script src="./scripts/app-bootstrap.js"></script>
 
@@ -158,6 +178,11 @@
           sentinel.checked = false;
           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'visible');
           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'none');
+
+          // Hide boundaries for ArcGIS
+          ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+            if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+          });
         } else {
           // Prevent unchecking both (fallback to base)
           arcgis.checked = true;
@@ -167,10 +192,21 @@
           arcgis.checked = false;
           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'visible');
           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'none');
+
+          // Show boundaries for Sentinel-2
+          ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+            if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
+          });
+
         } else {
           arcgis.checked = true;
           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'visible');
           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'none');
+
+          // Hide boundaries for ArcGIS
+          ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+            if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+          });
         }
       }
 

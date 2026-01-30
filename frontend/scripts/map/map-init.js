@@ -4,11 +4,13 @@ const map = new maplibregl.Map({
   center: CONFIG.DEFAULT_CENTER,
   zoom: CONFIG.DEFAULT_ZOOM,
   maxZoom: 22,
-  hash: false, // Disable default hash to use custom implementation with 6-digit precision
-  pitch: 0, // Start flat for better view of global weather
+  hash: false,
+  attributionControl: false,
+  pitch: 0, // Start flat earth view
   bearing: 0,
   style: {
     version: 8,
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources: {
       // 1. Satellite (Base)
       satellite: {
@@ -80,7 +82,9 @@ const map = new maplibregl.Map({
         type: "raster",
         source: "contours",
         paint: {
-          "raster-opacity": 1
+          "raster-opacity": 1,
+          "raster-saturation": -0.7, // Grayscale to simulate black lines
+          "raster-contrast": 0.2
         },
         layout: { visibility: "none" }
       }

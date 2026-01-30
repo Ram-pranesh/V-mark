@@ -2,8 +2,7 @@
   const scripts = [
     "./scripts/map/map-init.js",
     "./scripts/map/map-layers.js",
-    "./scripts/map/risk-factors/risk-factors-layers.js",
-    "./scripts/map/risk-factors/risk-factors-ui.js",
+
     "./scripts/map/map-controls.js",
     "./scripts/map/map-switcher.js",
     "./scripts/map/map-time-controls.js",
@@ -32,6 +31,15 @@
       return scripts.reduce((p, src) => p.then(() => loadScript(src)), Promise.resolve());
     })
     .catch((err) => {
-      console.error(err);
+      console.warn("Config load failed, using defaults", err);
+      // Fallback config to ensure map loads even if backend is unreachable
+      window.CONFIG = {
+        DEFAULT_CENTER: [78.9629, 20.5937], // India center approx
+        DEFAULT_ZOOM: 4,
+        OPENWEATHER_KEY: "", // Features needing keys will fail gracefully
+        FIRMS_MAP_KEY: ""
+      };
+      // Load scripts anyway
+      scripts.reduce((p, src) => p.then(() => loadScript(src)), Promise.resolve());
     });
 })();

@@ -169,7 +169,7 @@
 }
 
 :root {
-    --sidebar-width: clamp(260px, 28vw, 360px);
+    --sidebar-width: clamp(100px, 18vw, 300px);
 }
 
 body {
@@ -202,6 +202,7 @@ body {
     width: 100vw;
     display: none;
     background: #000;
+    pointer-events: none;
 }
 
 #wind-history-container.sidebar-open {
@@ -635,13 +636,19 @@ body {
 
 
 .legend-box {
-    background: #222;
-    padding: 10px;
+    position: absolute;
+    bottom: 10px;
+    right: 20px;
+    background: transparent;
+    padding: 12px;
     border-radius: 8px;
-    font-size: 12px;
+    font-size: 13px;
     color: #fff;
-    margin-top: 20px;
-    border: 1px solid #333;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    z-index: 100;
+    width: 220px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 

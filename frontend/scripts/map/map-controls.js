@@ -168,7 +168,7 @@
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lastPt[1]}&longitude=${lastPt[0]}&current=temperature_2m`)
         .then(r => r.json())
         .then(d => {
-          const temp = d.current ? Math.round(d.current.temperature_2m) : "--";
+          const temp = (d.current && d.current.temperature_2m !== undefined) ? Math.round(d.current.temperature_2m) : "--";
 
           let content = `<div style="font-family:'Segoe UI',sans-serif; color:#111; padding:6px; min-width:140px;">`;
           content += `<div style="font-size:14px; font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:4px;">Measurement</div>`;
@@ -179,15 +179,49 @@
           }
           content += `</div>`;
 
-          removePopup();
-          currentPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, className: 'tool-popup' })
-            .setLngLat(lastPt)
-            .setHTML(content)
-            .addTo(map);
-
-          currentPopup.on('close', () => { currentPopup = null; });
+          // Only recreate popup if it doesn't exist or content changed significantly? 
+          // Actually, just updating it is safer to avoid flicker.
+          if (currentPopup) {
+            currentPopup.setLngLat(lastPt).setHTML(content);
+          } else {
+            currentPopup = new maplibregl.Popup({
+              closeButton: true,
+              closeOnClick: false,
+              className: 'tool-popup',
+              anchor: 'bottom', // Show above the point
+              offset: [0, -10]
+            })
+              .setLngLat(lastPt)
+              .setHTML(content)
+              .addTo(map);
+            currentPopup.on('close', () => { currentPopup = null; });
+          }
         })
-        .catch(e => console.error(e));
+        .catch(e => {
+          console.error("Weather fetch failed", e);
+          // Show popup without weather if it fails
+          let content = `<div style="font-family:'Segoe UI',sans-serif; color:#111; padding:6px; min-width:140px;">` +
+            `<div style="font-size:14px; font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:4px;">Measurement</div>` +
+            `<div style="font-size:13px; margin-bottom:2px;">${labelText}</div>` +
+            `<div style="font-size:13px; color:#333; margin-bottom:2px;">Avg Temp: <b>--</b></div>` +
+            (closed ? `<div style="font-size:13px; color:#d83b3b;">Active Hotspots: <b>${activeHotspots}</b></div>` : "") +
+            `</div>`;
+          if (currentPopup) {
+            currentPopup.setLngLat(lastPt).setHTML(content);
+          } else {
+            currentPopup = new maplibregl.Popup({
+              closeButton: true,
+              closeOnClick: false,
+              className: 'tool-popup',
+              anchor: 'bottom', // Show above the point
+              offset: [0, -10]
+            })
+              .setLngLat(lastPt)
+              .setHTML(content)
+              .addTo(map);
+            currentPopup.on('close', () => { currentPopup = null; });
+          }
+        });
     } else {
       removePopup();
     }
@@ -369,7 +403,13 @@
            `;
 
         removePopup();
-        currentPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, className: 'tool-popup' })
+        currentPopup = new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: false,
+          className: 'tool-popup',
+          anchor: 'bottom', // Show above the point
+          offset: [0, -10]
+        })
           .setLngLat(midPt)
           .setHTML(content)
           .addTo(map);
@@ -382,7 +422,12 @@
       .catch(() => {
         // Show error on map
         removePopup();
-        currentPopup = new maplibregl.Popup({ closeButton: true, className: 'tool-popup' })
+        currentPopup = new maplibregl.Popup({
+          closeButton: true,
+          className: 'tool-popup',
+          anchor: 'bottom', // Show above the point
+          offset: [0, -10]
+        })
           .setLngLat(end) // Show at end point
           .setHTML(`<div style="color:red; padding:5px;"><b>Route Unavailable</b><br>Could not calculate path in this area.</div>`)
           .addTo(map);
@@ -644,13 +689,13 @@
   const toggleContainer = document.createElement("div");
   Object.assign(toggleContainer.style, {
     position: "absolute",
-    top: "15px",
+    top: "20px",
     right: "90px", // Between Nav (0-50px) and Sat (180px)
     zIndex: 10,
     background: "#222",
     borderRadius: "20px",
-    width: "48px",
-    height: "26px",
+    width: "58px",
+    height: "32px",
     cursor: "pointer",
     boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
     display: "flex",
@@ -667,13 +712,13 @@
     background: "#ff6b35",
     borderRadius: "50%",
     position: "absolute",
-    left: "24px", // Default 3D position
-    top: "2px",
+    left: "26px", // Default 3D position
+    top: "4.5px",
     transition: "left 0.2s ease, background 0.2s ease, transform 0.2s",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "9px",
+    fontSize: "12px",
     fontWeight: "800",
     color: "#000",
     boxShadow: "0 2px 5px rgba(0,0,0,0.2)"
@@ -692,7 +737,7 @@
       map.easeTo({ pitch: 0 }); // Pitch 0 as requested
 
       // UI Update
-      sliderKnob.style.left = "24px";
+      sliderKnob.style.left = "32px";
       sliderKnob.style.background = "#ff6b35";
       sliderKnob.style.color = "#000";
       sliderKnob.textContent = "3D";
@@ -703,7 +748,7 @@
       map.easeTo({ pitch: 0, bearing: 0 });
 
       // UI Update
-      sliderKnob.style.left = "2px";
+      sliderKnob.style.left = "4px";
       sliderKnob.style.background = "#ccc";
       sliderKnob.style.color = "#333";
       sliderKnob.textContent = "2D";

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Drone View - V-mark</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <script src="https://unpkg.com/maplibre-gl@5.8.0/dist/maplibre-gl.js"></script>
+
+    <!-- Reuse existing styles -->
+    <link rel="stylesheet" href="../assets/css/style.css" />
+
+    <style>
+        /* Drone specific overrides */
+        .drone-view-indicator {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 69, 0, 0.9);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .scanning-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(0, 255, 0, 0.6);
+            box-shadow: 0 0 10px #0f0;
+            animation: scan 4s linear infinite;
+            z-index: 500;
+            pointer-events: none;
+        }
+
+        @keyframes scan {
+            0% {
+                top: 0%;
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                top: 100%;
+                opacity: 0;
+            }
+        }
+
+        .hud-overlay {
+            position: absolute;
+            inset: 20px;
+            border: 2px solid rgba(0, 255, 0, 0.3);
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 400;
+            background:
+                linear-gradient(to right, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 0 0,
+                linear-gradient(to bottom, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 0 0,
+                linear-gradient(to left, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 100% 0,
+                linear-gradient(to bottom, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 100% 0,
+                linear-gradient(to left, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 100% 100%,
+                linear-gradient(to top, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 100% 100%,
+                linear-gradient(to right, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 0 100%,
+                linear-gradient(to top, rgba(0, 255, 0, 0.5) 2px, transparent 2px) 0 100%;
+            background-size: 20px 20px;
+            background-repeat: no-repeat;
+        }
+
+        .sidebar-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            /* Pushes content to bottom */
+        }
+    </style>
+</head>
+
+<body>
+    <div id="sidebar" class="open">
+        <div class="sidebar-header">
+            <h2>
+                <img src="../assets/img/drone-image.png"
+                    style="width:40px; height:40px; object-fit:contain; margin-right:10px; border-radius:50%; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);">
+                Drone
+            </h2>
+        </div>
+
+        <div class="sidebar-content">
+
+            <!-- Region Mode -->
+            <div class="layer-group">
+                <div class="group-title">
+                    <span class="material-icons-round" style="color:#ff6b35;">map</span> Region Mode
+                </div>
+                <div class="layer-item">
+                    <span class="material-icons-round" style="margin-right:12px; color:#4aa8ff;">business</span>
+                    <span>Forest Offices (India)</span>
+                </div>
+                <div class="layer-item">
+                    <span class="material-icons-round"
+                        style="margin-right:12px; color:#ff6b35;">local_fire_department</span>
+                    <span>Fire Departments (India)</span>
+                </div>
+            </div>
+
+            <!-- Drone Selection -->
+            <div class="layer-group">
+                <div class="group-title">
+                    <span class="material-symbols-rounded" style="color:#ff6b35;">drone</span> Active Drone
+                </div>
+                <div style="padding: 0 8px;">
+                    <select id="drone-select"
+                        style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #333; border-radius:6px; outline:none; margin-bottom:8px;">
+                        <option value="drone-1">Drone-1</option>
+                        <option value="new">+ Add Drone</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Drone Stats -->
+            <div class="layer-group" id="drone-stats">
+                <div class="group-title">
+                    <span class="material-symbols-rounded" style="color:#ff6b35;">analytics</span> Telemetry
+                </div>
+                <div style="padding:8px; font-size:13px; color:#ccc;">
+                    <div style="margin-bottom:6px; display:flex; justify-content:space-between;">
+                        <span>Battery</span>
+                        <span id="stat-battery" style="color:#0f0;">100%</span>
+                    </div>
+                    <div style="margin-bottom:6px; display:flex; justify-content:space-between;">
+                        <span>Altitude</span>
+                        <span id="stat-alt">150m</span>
+                    </div>
+                    <div style="margin-bottom:6px; display:flex; justify-content:space-between;">
+                        <span>Speed</span>
+                        <span id="stat-speed">0 m/s</span>
+                    </div>
+                    <div style="margin-bottom:6px; display:flex; justify-content:space-between;">
+                        <span>Status</span>
+                        <span id="stat-status" style="color:#4aa8ff;">Active</span>
+                    </div>
+                    <div style="margin-top:12px; padding-top:8px; border-top:1px solid #333;">
+                        <span style="color:#ff6b35;">Fire Detections:</span> <span id="stat-fires">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spacer -->
+            <!-- System/Mode Controls -->
+            <div class="layer-group">
+                <div class="group-title">
+                    <span class="material-icons-round">settings_system_daydream</span> System
+                </div>
+
+                <div class="layer-item" onclick="alert('Notification Alert System - No notifications')">
+                    <span class="material-icons-round"
+                        style="margin-right:12px; font-size:20px; color:#ff6b35;">notifications_none</span>
+                    <span>Alert System</span>
+                </div>
+
+                <div class="layer-item" onclick="window.location.href='../'">
+                    <span class="material-icons-round"
+                        style="margin-right:12px; font-size:20px; color:#4aa8ff;">satellite_alt</span>
+                    <span>Switch to Satellite Mode</span>
+                </div>
+            </div>
+
+
+
+        </div>
+    </div>
+
+    <button id="sidebar-toggle" onclick="toggleSidebar()" class="open" aria-label="Close sidebar">
+        <span id="sidebar-toggle-icon" class="material-icons-round">menu_open</span>
+    </button>
+
+    <div id="map" class="sidebar-open">
+        <div class="drone-view-indicator">
+            <span class="material-icons-round">videocam</span> LIVE DRONE FEED
+        </div>
+        <div class="scanning-line"></div>
+        <div class="hud-overlay"></div>
+    </div>
+
+    <script src="./scripts/drone-map.js"></script>
+
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById("sidebar");
+            const mapEl = document.getElementById("map");
+            const toggle = document.getElementById("sidebar-toggle");
+            const icon = document.getElementById("sidebar-toggle-icon");
+
+            sidebar.classList.toggle("open");
+            mapEl.classList.toggle("sidebar-open");
+            toggle.classList.toggle("open");
+
+            const isOpen = sidebar.classList.contains("open");
+            icon.textContent = isOpen ? "menu_open" : "menu";
+            toggle.setAttribute("aria-label", isOpen ? "Close sidebar" : "Open sidebar");
+
+            setTimeout(() => {
+                if (window.map && typeof map.resize === 'function') map.resize();
+            }, 350);
+        }
+
+        // Drone Logic
+        const droneSelect = document.getElementById('drone-select');
+        const headerTitle = document.querySelector('.sidebar-header h2');
+
+        // Sim data
+        const drones = {
+            'drone-1': { name: 'Drone-1', bat: '88%', alt: '120m', fires: '0' },
+            'default': { name: 'Drone', bat: '--', alt: '--', fires: '--' }
+        };
+
+        function updateDrone(id) {
+            const d = drones[id] || drones['default'];
+
+            // Update Header Name
+            // Removing the icon for text update is tricky, so we update the text node
+            // headerTitle.childNodes[1] is the text " Drone"
+            if (headerTitle.lastChild.nodeType === 3) {
+                headerTitle.lastChild.textContent = " " + d.name;
+            }
+
+            // Update Stats
+            document.getElementById('stat-battery').innerText = d.bat;
+            document.getElementById('stat-alt').innerText = d.alt;
+            document.getElementById('stat-fires').innerText = d.fires;
+
+            // Random fluctuate
+            if (id !== 'default') {
+                document.getElementById('stat-status').innerText = "Patrolling";
+                document.getElementById('stat-status').style.color = "#0f0";
+            }
+        }
+
+        droneSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'new') {
+                const name = prompt("Enter Drone Name:", "Drone-" + (Object.keys(drones).length));
+                if (name) {
+                    const id = name.toLowerCase().replace(/\s+/g, '-');
+                    const newOpt = document.createElement('option');
+                    newOpt.value = id;
+                    newOpt.innerText = name;
+
+                    // Insert before "+ Add Drone"
+                    droneSelect.insertBefore(newOpt, droneSelect.lastElementChild);
+
+                    // Init data
+                    drones[id] = {
+                        name: name,
+                        bat: '100%',
+                        alt: '0m',
+                        fires: '0'
+                    };
+
+                    droneSelect.value = id;
+                    updateDrone(id);
+                } else {
+                    droneSelect.value = 'drone-1'; // Revert
+                }
+            } else {
+                updateDrone(e.target.value);
+            }
+        });
+
+        // Loop simulation
+        setInterval(() => {
+            const id = droneSelect.value;
+            if (id !== 'new' && drones[id]) {
+                // Random battery drain
+                let bat = parseInt(drones[id].bat);
+                if (bat > 10 && Math.random() > 0.9) {
+                    bat--;
+                    drones[id].bat = bat + '%';
+                    document.getElementById('stat-battery').innerText = bat + '%';
+                }
+            }
+        }, 5000);
+
+        // Init
+        updateDrone('drone-1');
+
+    </script>
+</body>
+
+</html>

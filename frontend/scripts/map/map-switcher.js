@@ -3,15 +3,51 @@
   if (!map) return;
 
   function setMapView(mode) {
-    const overlays = ["osm-roads", "contours-layer", "terrain-hillshade"];
+    const overlays = [
+      "osm-roads",
+      "contours-layer",
+      "terrain-hillshade",
+      "contours",
+      "contour-text",
+      "hills", // New hillshade layer
+      "country-borders",
+      "state-borders",
+      "state-fills",
+      "state-labels"
+    ];
+
     overlays.forEach((id) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
     });
 
     if (mode === "roadmap") {
       map.setLayoutProperty("osm-roads", "visibility", "visible");
+      map.setTerrain(null); // Flatten for roadmap
     } else if (mode === "contours") {
+      // Restore original colorful raster contours (OpenTopoMap)
       map.setLayoutProperty("contours-layer", "visibility", "visible");
+      // Enable 3D terrain for "globe" feel
+      map.setTerrain({ source: "terrainSource", exaggeration: 1.5 });
+
+    } else if (mode === "satellite") {
+      // Restore satellite base and 3D terrain
+      if (map.getLayer("satellite")) map.setLayoutProperty("satellite", "visibility", "visible");
+      map.setTerrain({ source: "terrainSource", exaggeration: 1.5 });
+
+      // Re-enable boundaries if Sentinel-2 is active
+      const sentinel = document.getElementById('sat-sentinel');
+      if (sentinel && sentinel.checked) {
+        // Ensure Sentinel is visible
+        if (map.getLayer("sentinel-2")) map.setLayoutProperty("sentinel-2", "visibility", "visible");
+        if (map.getLayer("satellite")) map.setLayoutProperty("satellite", "visibility", "none");
+
+        ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "visible");
+        });
+      } else {
+        // Default arcgis/satellite
+        if (map.getLayer("sentinel-2")) map.setLayoutProperty("sentinel-2", "visibility", "none");
+      }
     }
   }
 
@@ -38,13 +74,15 @@
   map.easeTo({ pitch: 0 });
   document.body.appendChild(mapSelectorContainer);
 
-  const mapIcon = document.createElement("img");
-  mapIcon.src = "./assets/img/image.png"; // User provided transparent image
-  mapIcon.style.width = "24px";
-  mapIcon.style.height = "24px";
-  mapIcon.style.objectFit = "cover";
-  mapIcon.style.borderRadius = "4px";
-  mapIcon.style.marginRight = "6px";
+  /* Removed mapIcon image code */
+  const mapIcon = document.createElement("span");
+  mapIcon.className = "material-symbols-rounded";
+  mapIcon.textContent = "layers"; // Google "Stacks" icon equivalent
+  Object.assign(mapIcon.style, {
+    fontSize: "24px",
+    color: "#ff6b35",
+    marginRight: "6px"
+  });
   mapSelectorContainer.appendChild(mapIcon);
 
   const labelSpan = document.createElement("span");

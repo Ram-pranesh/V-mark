@@ -4,12 +4,16 @@
   if (!map) return;
 
   map.on("click", async (e) => {
-    // Show weather popup unless measuring or routing is currently active
-    if (window.measuring === true || window.routing === true) return;
+    // Weather scan is now always active, even during tools
+
     const lat = e.lngLat.lat;
     const lng = e.lngLat.lng;
 
-    const popup = new maplibregl.Popup()
+    const popup = new maplibregl.Popup({
+      anchor: 'top', // Show below the point
+      offset: [0, 10], // Push down slightly
+      closeButton: true // Cleaner look but user requested close button
+    })
       .setLngLat([lng, lat])
       .setHTML('<div style="color:#333; padding:5px;">Scanning atmosphere...</div>')
       .addTo(map);
@@ -32,9 +36,9 @@
       // Parse Data
       const components = airData.list[0].components; // co, no2, o3, so2, pm2_5, pm10, nh3
       const aqi = airData.list[0].main.aqi; // 1 = Good, 5 = Very Poor
-      
+
       // Color code AQI
-      const aqiColors = {1: '#00e400', 2: '#ffff00', 3: '#ff7e00', 4: '#ff0000', 5: '#7e0023'};
+      const aqiColors = { 1: '#00e400', 2: '#ffff00', 3: '#ff7e00', 4: '#ff0000', 5: '#7e0023' };
       const aqiColor = aqiColors[aqi] || '#ccc';
 
       const htmlContent = `

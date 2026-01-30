@@ -1,26 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { margin: 0; padding: 0; background: #000; font-family: 'Segoe UI', sans-serif; }
-    #map { width: 100vw; height: 100vh; background: #111; }
-
-    #coords {
-      position: absolute;
-      top: 20px;
-      left: 15px;
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      padding: 6px 10px;
-      font-size: 12px;
-      border-radius: 4px;
-      z-index: 1000;
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      font-family: 'Segoe UI', sans-serif;
     }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      background: #111;
+    }
+
+
 
     #wind-tooltip {
       position: absolute;
@@ -36,38 +37,74 @@
     }
 
     .sidebar {
-      position: absolute; top: 20px; left: 20px; width: 260px;
-      background: rgba(20, 25, 35, 0.95); backdrop-filter: blur(10px);
-      border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
-      z-index: 1000; padding: 20px; color: white;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 260px;
+      background: rgba(20, 25, 35, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 1000;
+      padding: 20px;
+      color: white;
     }
 
-    .title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #93c5fd; }
-    .date-display { color: #4ade80; font-weight: bold; display: block; text-align: center; margin-bottom: 10px; }
-    input[type=range] { width: 100%; cursor: pointer; }
-    .range-labels { display: flex; justify-content: space-between; color: #666; font-size: 10px; }
-    .error-msg { color: #ff4444; font-size: 11px; margin-top: 5px; display: none; }
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #93c5fd;
+    }
+
+    .date-display {
+      color: #4ade80;
+      font-weight: bold;
+      display: block;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    input[type=range] {
+      width: 100%;
+      cursor: pointer;
+    }
+
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      color: #666;
+      font-size: 10px;
+    }
+
+    .error-msg {
+      color: #ff4444;
+      font-size: 11px;
+      margin-top: 5px;
+      display: none;
+    }
   </style>
 </head>
+
 <body>
-  
+
 
   <div id="map"></div>
-  <div id="coords">Lat: -- | Lng: --</div>
+
   <div id="wind-tooltip" style="display:none;"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.js"></script>
 
   <script>
-    var map = L.map('map', { center: [20.0, 78.0], zoom: 4, zoomControl: false });
+    var map = L.map('map', { center: [20.0, 78.0], zoom: 4, zoomControl: false, attributionControl: false });
     var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
     var activeWindLayer = null;
     var windGrid = null;
     satellite.addTo(map);
 
     L.control.zoom({ position: 'topright' }).addTo(map);
-    L.control.scale({ position: 'bottomleft' }).addTo(map);
+
 
     var locateControl = L.control({ position: 'topright' });
     locateControl.onAdd = function () {
@@ -173,7 +210,7 @@
     updateData();
 
     map.on('mousemove', function (e) {
-      const coordsDiv = document.getElementById('coords');
+      const coordsDiv = window.parent.document.getElementById('coords');
       if (coordsDiv) {
         coordsDiv.textContent = `Lat: ${e.latlng.lat.toFixed(6)} | Lng: ${e.latlng.lng.toFixed(6)}`;
       }
@@ -193,11 +230,12 @@
 
       tooltip.style.display = 'block';
       tooltip.innerHTML = `Speed: ${speed.toFixed(1)} m/s<br>Direction: ${direction.toFixed(0)}°`;
-      
+
       const point = map.latLngToContainerPoint(e.latlng);
       tooltip.style.left = `${point.x + 6}px`;
       tooltip.style.top = `${point.y + 6}px`;
     });
   </script>
 </body>
+
 </html>

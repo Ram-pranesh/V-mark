@@ -30,6 +30,111 @@
       paint: { "raster-opacity": 1 }
     });
 
+    // --- Boundaries & States (For Satellite/Sentinel Mode) ---
+    // 1. World Countries
+    map.addSource("world-countries", {
+      type: "geojson",
+      data: "https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson"
+    });
+
+    map.addLayer({
+      id: "country-borders",
+      type: "line",
+      source: "world-countries",
+      layout: { visibility: "none" },
+      paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.5 }
+    });
+
+    // 2. US States with Hover
+    map.addSource("us-states", {
+      type: "geojson",
+      data: "https://maplibre.org/maplibre-gl-js/docs/assets/us_states.geojson",
+      generateId: true // Important for feature-state
+    });
+
+    map.addLayer({
+      id: "state-fills",
+      type: "fill",
+      source: "us-states",
+      layout: { visibility: "none" },
+      paint: {
+        "fill-color": "#627BC1",
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          0.4, // Hover opacity
+          0.0  // Normal opacity (transparent)
+        ]
+      }
+    });
+
+    map.addLayer({
+      id: "state-borders",
+      type: "line",
+      source: "us-states",
+      layout: { visibility: "none" },
+      paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.7 }
+    });
+
+    // Labels for states
+    map.addLayer({
+      id: "state-labels",
+      type: "symbol",
+      source: "us-states",
+      layout: {
+        "visibility": "none",
+        "text-field": ["get", "STATE_NAME"],
+        "text-font": ["Arial Unicode MS Bold"],
+        "text-size": 12,
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.1
+      },
+      paint: {
+        "text-color": "#fff",
+        "text-halo-color": "#000",
+        "text-halo-width": 2
+      }
+    });
+
+    // Hover Effect Logic
+    let hoveredStateId = null;
+    let statePopup = null;
+
+    map.on("mousemove", "state-fills", (e) => {
+      // Only active if Sentinel-2 is visible
+      if (map.getLayoutProperty("sentinel-2", "visibility") !== "visible") return;
+
+      if (e.features.length > 0) {
+        if (hoveredStateId !== null) {
+          map.setFeatureState({ source: "us-states", id: hoveredStateId }, { hover: false });
+        }
+        hoveredStateId = e.features[0].id;
+        map.setFeatureState({ source: "us-states", id: hoveredStateId }, { hover: true });
+
+        // Popup logic
+        const stateName = e.features[0].properties.STATE_NAME;
+        if (!statePopup) {
+          statePopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'state-popup' });
+        }
+        statePopup
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="color:#000; font-weight:bold; padding:4px;">${stateName}</div>`)
+          .addTo(map);
+      }
+    });
+
+    map.on("mouseleave", "state-fills", () => {
+      if (hoveredStateId !== null) {
+        map.setFeatureState({ source: "us-states", id: hoveredStateId }, { hover: false });
+      }
+      hoveredStateId = null;
+      if (statePopup) {
+        statePopup.remove();
+        statePopup = null;
+      }
+    });
+
+
     // Ensure base imagery stays under overlays
     if (map.getLayer("osm-roads")) {
       map.moveLayer("sentinel-2", "osm-roads");
@@ -37,36 +142,36 @@
 
     // Wind Layer
     map.addSource("weather-wind", {
-        type: "raster",
-        tiles: [`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${CONFIG.OPENWEATHER_KEY}`],
-        tileSize: 256
+      type: "raster",
+      tiles: [`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${CONFIG.OPENWEATHER_KEY}`],
+      tileSize: 256
     });
     map.addLayer({
-        id: "wind-layer",
-        type: "raster",
-        source: "weather-wind",
-        paint: { "raster-opacity": 0.6 },
-        layout: { visibility: "none" }
+      id: "wind-layer",
+      type: "raster",
+      source: "weather-wind",
+      paint: { "raster-opacity": 0.6 },
+      layout: { visibility: "none" }
     });
 
     // Temperature Layer - overlaid on main globe
     map.addSource("weather-temp", {
-        type: "raster",
-        tiles: [`https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${CONFIG.OPENWEATHER_KEY}`],
-        tileSize: 256,
-        maxzoom: 18
+      type: "raster",
+      tiles: [`https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${CONFIG.OPENWEATHER_KEY}`],
+      tileSize: 256,
+      maxzoom: 18
     });
     map.addLayer({
-        id: "temp-layer",
-        type: "raster",
-        source: "weather-temp",
-        paint: { 
-            "raster-opacity": 0.88,
-            "raster-saturation": 0.5,
-            "raster-contrast": 0.40,
-            "raster-resampling": "linear"
-        },
-        layout: { visibility: "none" }
+      id: "temp-layer",
+      type: "raster",
+      source: "weather-temp",
+      paint: {
+        "raster-opacity": 0.88,
+        "raster-saturation": 0.5,
+        "raster-contrast": 0.40,
+        "raster-resampling": "linear"
+      },
+      layout: { visibility: "none" }
     });
 
     // --- 3. FIRMS Fire Detections (WMS overlay) ---
@@ -128,7 +233,7 @@
     });
     buildFirmsLayer();
 
-  
+
   }
 
   if (map.loaded && map.loaded()) {
