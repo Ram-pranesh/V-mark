@@ -15,6 +15,7 @@
 
     <!-- Theme -->
     <link rel="stylesheet" href="./css/drone-ui.css" />
+    <link rel="stylesheet" href="./css/charging.css" />
 </head>
 
 <body>
@@ -23,8 +24,13 @@
 
         <!-- === Left Sidebar: Control Panel === -->
         <aside class="sidebar-col">
-            <div class="sidebar-header">
-                Drone Telemetry
+            <div class="sidebar-header" style="display:flex; align-items:center; gap:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"
+                    fill="#ff6b35">
+                    <path
+                        d="M160-160q0-75 41-134.5T307-381l-10-99H160v-240H40v-80h320v80H240v160h48l-8-80h400l-8 80h48v-160H600v-80h321v80H801v240H664l-10 99q65 27 105.5 86.5T800-160h-80q0-66-47-113t-113-47H400q-66 0-113 47t-47 113h-80Zm225-240h189l17-160H368l17 160Zm0 0h189-189Z" />
+                </svg>
+                <span>Drone Telemetry</span>
             </div>
 
             <div class="sidebar-scroll-area">
@@ -109,8 +115,12 @@
                     </div>
 
                     <div class="control-item" onclick="window.location.href='../index.html'">
-                        <span class="material-icons-round" style="color:#4aa8ff; margin-right:5px;">public</span>
-                        <span>Switch to Global View</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"
+                            fill="#4aa8ff" style="margin-right:5px;">
+                            <path
+                                d="M560-32v-80q117 0 198.5-81.5T840-392h80q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T560-32Zm0-160v-80q50 0 85-35t35-85h80q0 83-58.5 141.5T560-192ZM222-57q-15 0-30-6t-27-17L23-222q-11-12-17-27t-6-30q0-16 6-30.5T23-335l127-127q23-23 57-23.5t57 22.5l50 50 28-28-50-50q-23-23-23-56t23-56l57-57q23-23 56.5-23t56.5 23l50 50 28-28-50-50q-23-23-23-56.5t23-56.5l127-127q12-12 27-18t30-6q15 0 29.5 6t26.5 18l142 142q12 11 17.5 25.5T895-730q0 15-5.5 30T872-673L745-546q-23 23-56.5 23T632-546l-50-50-28 28 50 50q23 23 22.5 56.5T603-405l-56 56q-23 23-56.5 23T434-349l-50-50-28 28 50 50q23 23 22.5 57T405-207L278-80q-11 11-25.5 17T222-57Zm0-79 42-42-142-142-42 42 142 142Zm85-85 42-42-142-142-42 42 142 142Zm184-184 56-56-142-142-56 56 142 142Zm198-198 42-42-142-142-42 42 142 142Zm85-85 42-42-142-142-42 42 142 142ZM448-504Z" />
+                        </svg>
+                        <span>Satellite Telemetry</span>
                     </div>
                 </div>
 
@@ -152,7 +162,35 @@
             <div class="right-sidebar-content">
 
                 <!-- Video Card -->
-                <div class="rs-card">
+                <div class="rs-card" style="position:relative;">
+
+                    <!-- Charging Overlay (Inserted Here) -->
+                    <div id="charging-hud" class="charging-overlay">
+                        <div class="scanlines"></div>
+
+                        <div class="hud-container">
+                            <div class="ring ring-outer"></div>
+                            <div class="ring ring-inner"></div>
+                            <div class="ring ring-static"></div>
+
+                            <div class="battery-core">
+                                <div class="liquid" id="charge-liquid"></div>
+                                <div class="bubble"
+                                    style="left: 20%; width: 10px; height: 10px; animation-duration: 1.2s;"></div>
+                                <div class="bubble"
+                                    style="left: 60%; width: 6px; height: 6px; animation-duration: 2.5s;"></div>
+                                <div class="bubble"
+                                    style="left: 40%; width: 8px; height: 8px; animation-duration: 1.8s;"></div>
+                            </div>
+
+                            <div class="hud-text">
+                                <div class="status-label">CHARGING</div>
+                                <div class="voltage">⚡ 24.5V INPUT ⚡</div>
+                                <div id="charge-percent" style="font-size: 18px; margin-top:5px; color:#fff;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="vid-header">
                         <div style="display:flex; align-items:center; gap:8px;">
                             <span class="material-icons-round" style="font-size:16px; color:#fff;">videocam</span>
@@ -216,12 +254,16 @@
                                     style="color:#fff;" id="drone-lng">--</span></span>
                         </div>
 
-                        <!-- Maximize -->
-                        <div style="display:flex; justify-content:center; margin-top:4px;">
+                        <!-- Maximize & View All Drones -->
+                        <div style="display:flex; justify-content:center; gap:15px; margin-top:4px;">
                             <span class="material-icons-round"
                                 style="cursor:pointer; color:#888; transition:color 0.2s;"
                                 onclick="DroneUI.toggleVideoSize(true)" onmouseover="this.style.color='#fff'"
-                                onmouseout="this.style.color='#888'">expand_less</span>
+                                onmouseout="this.style.color='#888'" title="Maximize">expand_less</span>
+                            <span class="material-icons-round"
+                                style="cursor:pointer; color:#888; transition:color 0.2s;"
+                                onclick="DroneUI.showAllDrones()" onmouseover="this.style.color='#fff'"
+                                onmouseout="this.style.color='#888'" title="View All Drones">grid_view</span>
                         </div>
                     </div>
                 </div>
@@ -241,14 +283,6 @@
                     </div>
 
                     <div class="flight-list">
-                        <div class="f-row">
-                            <span class="f-head">Start</span>
-                            <span class="f-data" id="trip-start">--</span>
-                        </div>
-                        <div class="f-row">
-                            <span class="f-head">End</span>
-                            <span class="f-data" id="trip-end">--</span>
-                        </div>
                         <div style="display:flex; justify-content:space-between;">
                             <div class="f-row">
                                 <span class="f-head">Air Time</span>
@@ -261,16 +295,27 @@
                         </div>
                     </div>
 
-                    <!-- Toggles -->
-                    <div style="margin-top:auto; border-top:1px solid #222;">
-                        <label class="toggle-switch" style="padding:10px 15px; border:none;">
-                            <input type="checkbox" id="path-toggle">
-                            <span style="color:#ccc; font-size:0.85rem;">View Flight Path</span>
-                        </label>
-                        <label class="toggle-switch" style="padding:0 15px 15px 15px; border:none;">
-                            <input type="checkbox" id="coverage-toggle">
-                            <span style="color:#ccc; font-size:0.85rem;">View Coverage Area</span>
-                        </label>
+                    <!-- Action Buttons -->
+                    <div
+                        style="margin-top:auto; border-top:1px solid #222; padding:15px; display:flex; flex-direction:column; gap:10px;">
+                        <button id="path-toggle-btn" onclick="DroneUI.togglePathButton()"
+                            style="background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:10px 15px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:all 0.2s; color:#ccc;"
+                            onmouseover="this.style.background='rgba(255,107,53,0.1)'; this.style.borderColor='#ff6b35'; this.style.color='#fff';"
+                            onmouseout="this.style.background='#1a1a1a'; this.style.borderColor='#333'; this.style.color='#ccc';">
+                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"
+                                fill="currentColor">
+                                <path
+                                    d="M260-840q-45 0-72.5 50T160-680q0 63 17.5 111.5T210-496l110-22q13-32 26.5-73t13.5-89q0-60-27.5-110T260-840Zm55 520q19 0 32-14t13-39q0-17-8-35t-16-32l-96 20q0 40 17.5 70t57.5 30Zm385-320q-45 0-72.5 50T600-480q0 48 13.5 88.5T640-318l110 22q15-24 32.5-72T800-480q0-60-27.5-110T700-640Zm-55 520q40 0 57.5-30t17.5-70l-96-20q-8 14-16 32t-8 35q0 20 12.5 36.5T645-120ZM315-240q-77 0-117-57t-38-128l-18-27q-11-17-36.5-77T80-680q0-103 51-171.5T260-920q85 0 132.5 75.5T440-680q0 58-16 107t-28 79l8 13q8 14 22 44.5t14 63.5q0 57-35.5 95T315-240ZM645-40q-54 0-89.5-38T520-173q0-33 14-63.5t22-44.5l8-13q-12-30-28-79t-16-107q0-89 47.5-164.5T700-720q78 0 129 68.5T880-480q0 91-25.5 150.5T818-253l-18 28q1 71-38.5 128T645-40Z" />
+                            </svg>
+                            <span style="font-size:0.85rem; font-weight:500;">View Flight Path</span>
+                        </button>
+                        <button id="coverage-toggle-btn" onclick="DroneUI.toggleCoverageButton()"
+                            style="background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:10px 15px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:all 0.2s; color:#ccc;"
+                            onmouseover="this.style.background='rgba(255,107,53,0.1)'; this.style.borderColor='#ff6b35'; this.style.color='#fff';"
+                            onmouseout="this.style.background='#1a1a1a'; this.style.borderColor='#333'; this.style.color='#ccc';">
+                            <span class="material-icons-round" style="font-size:20px;">map</span>
+                            <span style="font-size:0.85rem; font-weight:500;">View Coverage Area</span>
+                        </button>
                     </div>
                 </div>
 
@@ -288,6 +333,21 @@
             <video src="../assets/img/drone-gif.mp4" autoplay loop muted playsinline
                 style="width:100%; height:100%; object-fit:contain;">
             </video>
+        </div>
+    </div>
+
+    <!-- All Drones Grid Modal -->
+    <div class="modal-overlay" id="all-drones-modal">
+        <div class="modal-content" style="width:95%; height:95%; max-width:none; max-height:none; position:relative;">
+            <button class="close-btn" onclick="DroneUI.closeAllDrones()"
+                style="position:absolute; top:10px; right:10px; z-index:1000; background:#ff6b35; border:none; color:#fff; width:40px; height:40px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.5); transition:all 0.2s;"
+                onmouseover="this.style.background='#ff8555'" onmouseout="this.style.background='#ff6b35'">
+                <span class="material-icons-round">close</span>
+            </button>
+            <div id="all-drones-grid"
+                style="width:100%; height:100%; padding:60px 20px 20px 20px; overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:20px; background:#0b0b0b;">
+                <!-- Grid items will be injected here -->
+            </div>
         </div>
     </div>
 

@@ -1,271 +1,437 @@
-
 // UI Controller for Drone Dashboard
+// Includes Real-Time Telemetry Simulation & Interactive Markers
 
 const UI = {
     state: {
         selectedForest: null,
         selectedDock: null,
         selectedDrone: null,
-        pathVisible: false
+        pathVisible: false,
+        coverageVisible: false,
+        // Simulation State
+        simInterval: null,
+        simProgress: 0,
+        // Marker State
+        tempMarkers: []
     },
 
     init() {
-        // Listeners for UI interaction
-        const dockSelect = document.getElementById('dock-select'); // legacy safe
-        if (dockSelect) dockSelect.addEventListener('change', (e) => this.handleDockSelect(e.target.value));
+        // --- Event Listeners ---
+        // (Path and coverage toggles are now handled by button clicks)
 
-        const pathToggle = document.getElementById('path-toggle');
-        if (pathToggle) pathToggle.addEventListener('change', (e) => this.togglePath(e.target.checked));
+        // --- Move Charging HUD into Video Container ---
+        // This ensures the animation matches the video dimensions exactly
+        const hud = document.getElementById('charging-hud');
+        const vidContainer = document.querySelector('.vid-body');
+        if (hud && vidContainer && hud.parentNode !== vidContainer) {
+            vidContainer.appendChild(hud);
+            // Enforce filling the parent container
+            hud.style.position = 'absolute';
+            hud.style.top = '0';
+            hud.style.left = '0';
+            hud.style.width = '100%';
+            hud.style.height = '100%';
+            hud.style.zIndex = '10'; // Sit on top of video
+        }
 
-        const covToggle = document.getElementById('coverage-toggle');
-        if (covToggle) covToggle.addEventListener('change', (e) => this.toggleCoverage(e.target.checked));
+        // --- Populate Forest Dropdown ---
+        const forestSelect = document.getElementById('forest-select');
+        if (forestSelect && window.DRONE_DB) {
+            forestSelect.innerHTML = '<option value="">Select Region...</option>';
+            Object.keys(window.DRONE_DB.forests).forEach(key => {
+                const f = window.DRONE_DB.forests[key];
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = f.name;
+                forestSelect.appendChild(opt);
+            });
 
-        // Forest Selection Button & Modal Logic
+            forestSelect.onchange = (e) => {
+                if (e.target.value) this.openForestPanel(e.target.value);
+            };
+        }
+
+        // Manual Forest Button (Sidebar)
         const forestBtn = document.getElementById('forest-select-btn');
         const modal = document.getElementById('forest-modal');
         const closeModal = document.getElementById('close-forest-modal');
         const searchInput = document.getElementById('forest-search');
-        const listContainer = document.getElementById('forest-list-container');
-        const label = document.getElementById('forest-select-label');
 
         if (forestBtn && modal) {
             forestBtn.onclick = () => {
                 modal.style.display = 'flex';
-                this.renderForestList(); // Populate list on open
+                this.renderForestList();
             };
         }
+        if (closeModal) closeModal.onclick = () => { modal.style.display = 'none'; };
+        if (searchInput) searchInput.oninput = (e) => this.renderForestList(e.target.value);
+        window.onclick = (e) => { if (e.target == modal) modal.style.display = 'none'; };
 
-        if (closeModal) {
-            closeModal.onclick = () => { modal.style.display = 'none'; };
-        }
-
-        if (searchInput) {
-            searchInput.oninput = (e) => this.renderForestList(e.target.value);
-        }
-
-        // Close on click outside
-        window.onclick = (e) => {
-            if (e.target == modal) modal.style.display = 'none';
-        }
-
-        // Mouse Hover Lat/Lng -> URL Hash
+        // --- Map Interaction ---
         if (window.map) {
             window.map.on('mousemove', (e) => {
-                window.location.hash = `${e.lngLat.lat.toFixed(4)},${e.lngLat.lng.toFixed(4)}`;
+                // window.location.hash = `${e.lngLat.lat.toFixed(4)},${e.lngLat.lng.toFixed(4)}`;
             });
-        } else {
-            // Retry if map not ready
-            setTimeout(() => {
-                if (window.map) {
-                    window.map.on('mousemove', (e) => {
-                        window.location.hash = `${e.lngLat.lat.toFixed(4)},${e.lngLat.lng.toFixed(4)}`;
-                    });
-                }
-            }, 2000);
         }
     },
 
-    // Called when a Forest matches from Sidebar Dropdown
+    // --- 1. Forest Selection ---
     openForestPanel(forestKey) {
         const data = window.DRONE_DB.forests[forestKey];
         if (!data) return;
 
         this.state.selectedForest = forestKey;
-        this.closeBottomPanel(); // Reset bottom panel
+        this.closeBottomPanel();
 
-        // Update Button Label
+        // Update Label
         const label = document.getElementById('forest-select-label');
         if (label) label.innerText = data.name;
 
-        // Reset Video to Loader State
-        const loader = document.getElementById('video-loader');
-        const video = document.getElementById('live-video-player');
-        const overlay = document.getElementById('video-overlay');
-        if (loader) loader.style.display = 'flex';
-        if (video) { video.style.display = 'none'; video.pause(); }
-        if (overlay) overlay.style.display = 'none';
-
-        // Populate Left Sidebar Stats
+        // A. Update Left Sidebar Stats
         const statsContainer = document.getElementById('sidebar-stats');
         if (statsContainer) {
             statsContainer.style.display = 'flex';
 
-            // Area
-            const areaEl = document.getElementById('sb-area');
-            if (areaEl) areaEl.innerText = data.acres + ' acres';
+            if (document.getElementById('sb-area')) document.getElementById('sb-area').innerText = data.acres + ' acres';
+            if (document.getElementById('sb-total-hotspots')) document.getElementById('sb-total-hotspots').innerText = `(${data.hotspots.total})`;
 
-            // Hotspots Header
-            const hTotal = document.getElementById('sb-total-hotspots');
-            if (hTotal) hTotal.innerText = `(${data.hotspots.total})`;
-
-            // Bars
-            const total = data.hotspots.total || 1; // avoid div by 0
-
-            const highP = (data.hotspots.severity.high / total) * 100;
-            const medP = (data.hotspots.severity.medium / total) * 100;
-            const lowP = (data.hotspots.severity.low / total) * 100;
-
-            const barHigh = document.getElementById('bar-high');
-            if (barHigh) barHigh.style.width = highP + '%';
-            const valHigh = document.getElementById('val-high');
-            if (valHigh) valHigh.innerText = data.hotspots.severity.high;
-
-            const barMed = document.getElementById('bar-med');
-            if (barMed) barMed.style.width = medP + '%';
-            const valMed = document.getElementById('val-med');
-            if (valMed) valMed.innerText = data.hotspots.severity.medium;
-
-            const barLow = document.getElementById('bar-low');
-            if (barLow) barLow.style.width = lowP + '%';
-            const valLow = document.getElementById('val-low');
-            if (valLow) valLow.innerText = data.hotspots.severity.low;
+            const total = data.hotspots.total || 1;
+            const setBar = (id, val) => {
+                const bar = document.getElementById('bar-' + id);
+                const txt = document.getElementById('val-' + id);
+                if (bar) bar.style.width = ((val / total) * 100) + '%';
+                if (txt) txt.innerText = val;
+            };
+            setBar('high', data.hotspots.severity.high);
+            setBar('med', data.hotspots.severity.medium);
+            setBar('low', data.hotspots.severity.low);
         }
 
-        // Populate SIDEBAR Dock List
+        // B. Populate Dock List (Sidebar)
         const dockList = document.getElementById('sidebar-docks-list');
         if (dockList) {
             dockList.innerHTML = '';
-            // If docks exist
             if (data.docks && data.docks.length > 0) {
-                data.docks.forEach((dock, index) => {
+                data.docks.forEach(dock => {
                     const btn = document.createElement('div');
-                    // Styled like a control item but clickable block
-                    btn.className = 'dock-item-btn'; // New class in CSS
-                    btn.style.cssText = "padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:4px; cursor:pointer; color:#ccc; font-size:0.9rem; transition:all 0.2s;";
+                    btn.className = 'dock-item-btn';
+                    btn.style.cssText = "padding:10px; background:#1a1a1a; border:1px solid #333; border-radius:4px; cursor:pointer; color:#ccc; font-size:0.85rem; transition:all 0.2s; margin-bottom:5px;";
                     btn.innerText = dock.location;
 
                     btn.onclick = () => {
-                        // Visual active state
                         Array.from(dockList.children).forEach(c => {
-                            c.style.borderColor = '#333';
-                            c.style.color = '#ccc';
+                            c.style.borderColor = '#333'; c.style.color = '#ccc'; c.style.background = '#1a1a1a';
                         });
                         btn.style.borderColor = '#ff6b35';
                         btn.style.color = '#fff';
+                        btn.style.background = 'rgba(255, 107, 53, 0.1)';
 
                         this.handleDockSelect(dock.id);
                     };
                     dockList.appendChild(btn);
                 });
             } else {
-                dockList.innerHTML = '<span style="font-size:0.8rem; color:#666;">No docks available.</span>';
+                dockList.innerHTML = '<div style="color:#666; font-size:0.8rem; padding:10px;">No docks active in this division.</div>';
             }
         }
 
-        // Populate Center Header
-        const nameEl = document.getElementById('bp-forest-name');
-        if (nameEl) nameEl.innerText = data.name;
-
-        // Populate Dock Buttons (Chips) - This section is removed as per instruction
-        // The new instruction replaces this with populating 'sidebar-docks-list'
-
-        // Fly to Forest
-        if (window.map && data.coordinates) {
-            const bounds = new maplibregl.LngLatBounds();
-            data.coordinates.forEach(c => bounds.extend(c));
-            window.map.fitBounds(bounds, { padding: 40, pitch: 0 }); // Top down
+        // C. Fly Map to Location
+        if (window.map && data.center) {
+            window.map.flyTo({ center: data.center, zoom: 10, pitch: 0 });
         }
     },
 
+    // --- 2. Dock Selection ---
     handleDockSelect(dockId) {
-        if (!dockId) return;
         this.state.selectedDock = dockId;
-
-        // Open Bottom Panel (Rise Up)
         const bottomPanel = document.getElementById('bottom-panel');
-        if (bottomPanel) {
-            bottomPanel.style.bottom = '0%'; // Slide up
-        }
+        if (bottomPanel) bottomPanel.style.bottom = '0%';
 
-        // Update Panel Header
-        const dockNameEl = document.getElementById('bp-dock-name');
-        if (dockNameEl) dockNameEl.innerText = dockId;
+        if (document.getElementById('bp-dock-name')) document.getElementById('bp-dock-name').innerText = dockId;
 
-        const drones = window.DRONE_DB.docks[dockId] || window.DRONE_DB.docks['default'];
-
-        // Populate Drone Select Dropdown (Right Sidebar Header)
+        const drones = window.DRONE_DB.docks[dockId] || [];
         const droneDropdown = document.getElementById('drone-detail-select');
+
         if (droneDropdown) {
-            droneDropdown.innerHTML = ''; // Clear previous
+            droneDropdown.innerHTML = '';
             drones.forEach(d => {
                 const opt = document.createElement('option');
                 opt.value = d.id;
-                opt.innerText = d.id; // Just ID for compact view
+                opt.innerText = `${d.id}`;
                 droneDropdown.appendChild(opt);
             });
 
-            // Add listener for drone change
             droneDropdown.onchange = (e) => {
                 const selected = drones.find(d => d.id === e.target.value);
                 if (selected) this.handleDroneSelect(selected);
             };
 
-            // Auto select first drone
             if (drones.length > 0) {
                 droneDropdown.value = drones[0].id;
                 this.handleDroneSelect(drones[0]);
             }
         }
+
+        const gallery = document.getElementById('hotspots-gallery');
+        if (gallery) {
+            gallery.innerHTML = '';
+            const count = Math.floor(Math.random() * 5) + 2;
+            for (let i = 0; i < count; i++) {
+                const div = document.createElement('div');
+                div.className = 'chip-btn';
+                div.style.minWidth = '120px';
+                div.innerHTML = `<span style="color:#ff4444;">●</span> Fire #${100 + i} <br><span style="font-size:0.7rem; color:#666;">${(Math.random() * 2 + 1).toFixed(1)}km away</span>`;
+                gallery.appendChild(div);
+            }
+        }
     },
 
+    // --- 3. Drone Selection (Updated for Charging & Dimensions) ---
     handleDroneSelect(drone) {
         this.state.selectedDrone = drone.id;
         const dData = window.DRONE_DB.drones[drone.id];
+        const isCharging = dData.status === 'Charging';
 
-        // 0. Handle Video State
-        const loader = document.getElementById('video-loader');
         const video = document.getElementById('live-video-player');
-        const overlay = document.getElementById('video-overlay');
+        const loader = document.getElementById('video-loader');
+        const overlay = document.getElementById('video-overlay'); // 'LIVE' tag
 
         if (loader) loader.style.display = 'none';
-        if (video) {
-            video.style.display = 'block';
-            video.play().catch(e => console.log('Autoplay prevented perms'));
+
+        if (isCharging) {
+            // --- CHARGING STATE ---
+            // 1. Hide Video & Live Overlay
+            if (video) video.style.display = 'none';
+            if (overlay) overlay.style.display = 'none';
+
+            // 2. Show Charging Animation (fills the video container)
+            this.toggleChargingMode(true);
+
+        } else {
+            // --- FLIGHT STATE ---
+            // 1. Hide Charging Animation
+            this.toggleChargingMode(false);
+
+            // 2. Show Video & Live Overlay
+            if (video) {
+                video.style.display = 'block';
+                if (overlay) overlay.style.display = 'block';
+
+                const vidMap = {
+                    1: 'drone-gif.mp4',
+                    2: 'drone-video2.mp4',
+                    3: 'drone-video3.mp4',
+                    4: 'drrone-video4.mp4',
+                    5: 'drone-video5.mp4'
+                };
+                const file = vidMap[dData.video_id] || 'drone-gif.mp4';
+                video.src = `../assets/img/${file}`;
+                video.play().catch(e => { console.error("Video play failed", e); });
+            }
         }
-        if (overlay) overlay.style.display = 'block';
 
-        // 1. Update Video Header (Batt)
-        const battEl = document.getElementById('drone-batt');
-        const battIcon = document.getElementById('batt-icon');
-        if (battEl) battEl.innerText = dData.batt + '%';
-        if (battIcon) {
-            if (dData.batt > 60) battIcon.style.color = '#00C851';
-            else if (dData.batt > 30) battIcon.style.color = '#ffbb33';
-            else battIcon.style.color = '#ff4444';
-        }
+        // B. Update Trip Data (Distance & Air Time only)
+        if (document.getElementById('trip-dist')) document.getElementById('trip-dist').innerText = dData.trip.distance;
+        if (document.getElementById('trip-air')) document.getElementById('trip-air').innerText = dData.trip.duration;
 
-        // 2. Update Telemetry
-        const t = dData.telemetry || {};
-        if (document.getElementById('drone-speed')) document.getElementById('drone-speed').innerText = t.speed + ' km/h';
-        if (document.getElementById('drone-alt')) document.getElementById('drone-alt').innerText = t.alt + ' m';
-        if (document.getElementById('drone-lat')) document.getElementById('drone-lat').innerText = t.lat;
-        if (document.getElementById('drone-lng')) document.getElementById('drone-lng').innerText = t.lng;
-
-        // 3. Status Banner - REMOVED text as requested "I dont want that option in flight status that it says about the fire confirmed"
-        // We will just keep the banner simple or hidden, or just show generic status
-        const sbText = document.getElementById('sb-text');
-        const sbIcon = document.getElementById('sb-icon');
-        const banner = document.getElementById('status-banner');
-
-        if (banner) banner.style.display = 'none'; // Completely hiding per request "Remove that option completely"
-
-        // 4. Update Trip Info
-        this.updateRightSidebar(dData);
-
-        // 5. Reset Toggles
-        const pathTog = document.getElementById('path-toggle');
-        const covTog = document.getElementById('coverage-toggle');
-
+        // C. Update Map Layers (restore previous state if any)
         this.clearMapLayers();
+        if (this.state.pathVisible) this.togglePath(true);
+        if (this.state.coverageVisible) this.toggleCoverage(true);
 
-        if (pathTog && pathTog.checked) this.togglePath(true);
-        if (covTog) {
-            covTog.checked = false;
-            covTog.onclick = (e) => this.toggleCoverage(e.target.checked);
+        // D. Start Telemetry Simulation
+        this.startSimulation(dData);
+    },
+
+    // --- 4. Simulation Core ---
+    startSimulation(droneData) {
+        if (this.state.simInterval) clearInterval(this.state.simInterval);
+
+        const isCharging = droneData.status === 'Charging';
+        this.state.simBatt = parseFloat(droneData.batt);
+
+        if (isCharging) {
+            // Charging Mode: Static placeholders
+            const elLat = document.getElementById('drone-lat');
+            const elLng = document.getElementById('drone-lng');
+            const elSpeed = document.getElementById('drone-speed');
+            const elAlt = document.getElementById('drone-alt');
+
+            if (elLat) elLat.innerText = "--";
+            if (elLng) elLng.innerText = "--";
+            if (elSpeed) elSpeed.innerText = "--";
+            if (elAlt) elAlt.innerText = "--";
+
+            // Battery charging loop
+            this.state.simInterval = setInterval(() => {
+                this.state.simBatt += 0.2;
+                if (this.state.simBatt > 100) this.state.simBatt = 100;
+
+                const elBatt = document.getElementById('drone-batt');
+                const iconBatt = document.getElementById('batt-icon');
+
+                if (elBatt) elBatt.innerText = "Charging...";
+                if (iconBatt) iconBatt.style.color = '#00C851';
+            }, 1000);
+
+            return;
+        }
+
+        // Flying Mode: Normal telemetry
+        this.state.simProgress = Math.random() * 0.6 + 0.2;
+
+        const start = droneData.trip.startCoords;
+        const end = droneData.trip.endCoords;
+        const baseSpeed = droneData.telemetry.speed;
+        const baseAlt = parseInt(droneData.telemetry.alt);
+
+        this.state.simInterval = setInterval(() => {
+            const step = (baseSpeed / 10000);
+            this.state.simProgress += step;
+            if (this.state.simProgress >= 1.0) this.state.simProgress = 0.0;
+
+            const p = this.state.simProgress;
+            const curLng = start[0] + (end[0] - start[0]) * p;
+            const curLat = start[1] + (end[1] - start[1]) * p;
+
+            let curSpeed = (baseSpeed + (Math.random() * 10 - 5));
+            curSpeed = Math.max(0, curSpeed).toFixed(1);
+
+            let curAlt = Math.floor(baseAlt + (Math.random() * 4 - 2));
+            curAlt = Math.max(0, curAlt);
+
+            this.state.simBatt -= 0.05;
+            if (this.state.simBatt <= 0) this.state.simBatt = 100;
+            const curBatt = this.state.simBatt.toFixed(1);
+
+            const elLat = document.getElementById('drone-lat');
+            const elLng = document.getElementById('drone-lng');
+            const elSpeed = document.getElementById('drone-speed');
+            const elAlt = document.getElementById('drone-alt');
+            const elBatt = document.getElementById('drone-batt');
+            const iconBatt = document.getElementById('batt-icon');
+
+            if (elLat) elLat.innerText = curLat.toFixed(5);
+            if (elLng) elLng.innerText = curLng.toFixed(5);
+            if (elSpeed) elSpeed.innerText = curSpeed + ' km/h';
+            if (elAlt) elAlt.innerText = curAlt + ' m';
+
+            if (elBatt) elBatt.innerText = Math.floor(curBatt) + '%';
+            if (iconBatt) {
+                if (curBatt > 60) iconBatt.style.color = '#00C851';
+                else if (curBatt > 30) iconBatt.style.color = '#ffbb33';
+                else iconBatt.style.color = '#ff4444';
+            }
+        }, 1000);
+    },
+
+    // --- 5. Map Helpers ---
+    togglePath(show) {
+        const map = window.map;
+        if (!map || !this.state.selectedDrone) return;
+
+        if (show) {
+            this.clearTempMarkers();
+            const dData = window.DRONE_DB.drones[this.state.selectedDrone];
+            const start = dData.trip.startCoords;
+            const end = dData.trip.endCoords;
+
+            const geojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: [start, end] } };
+
+            if (map.getSource('drone-path')) {
+                map.getSource('drone-path').setData(geojson);
+            } else {
+                map.addSource('drone-path', { type: 'geojson', data: geojson });
+                map.addLayer({
+                    id: 'drone-path-line', type: 'line', source: 'drone-path',
+                    paint: { 'line-color': '#ff6b35', 'line-width': 3, 'line-dasharray': [2, 1] }
+                });
+            }
+            this.addPathLabel(start, "Start");
+            this.addPathLabel(end, "End");
+
+            const bounds = new maplibregl.LngLatBounds(start, end);
+            map.fitBounds(bounds, { padding: 50 });
+        } else {
+            if (map.getLayer('drone-path-line')) map.removeLayer('drone-path-line');
+            if (map.getSource('drone-path')) map.removeSource('drone-path');
+            const labels = document.getElementsByClassName('path-permanent-label');
+            while (labels.length > 0) { labels[0].parentNode.removeChild(labels[0]); }
         }
     },
 
-    // Helper: Render Forest List in Modal
+    toggleCoverage(show) {
+        const map = window.map;
+        if (!map || !this.state.selectedDrone) return;
+
+        if (show) {
+            const dData = window.DRONE_DB.drones[this.state.selectedDrone];
+            const c = dData.trip.startCoords;
+            const d = 0.015;
+            const poly = [[c[0] - d, c[1] - d], [c[0] + d, c[1] - d], [c[0] + d, c[1] + d], [c[0] - d, c[1] + d], [c[0] - d, c[1] - d]];
+
+            const geojson = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [poly] } };
+
+            if (map.getSource('drone-cov')) {
+                map.getSource('drone-cov').setData(geojson);
+            } else {
+                map.addSource('drone-cov', { type: 'geojson', data: geojson });
+                map.addLayer({
+                    id: 'drone-cov-fill', type: 'fill', source: 'drone-cov',
+                    paint: { 'fill-color': '#00C851', 'fill-opacity': 0.1 }
+                });
+                map.addLayer({
+                    id: 'drone-cov-line', type: 'line', source: 'drone-cov',
+                    paint: { 'line-color': '#00C851', 'line-width': 1 }
+                });
+            }
+        } else {
+            if (map.getLayer('drone-cov-fill')) map.removeLayer('drone-cov-fill');
+            if (map.getLayer('drone-cov-line')) map.removeLayer('drone-cov-line');
+            if (map.getSource('drone-cov')) map.removeSource('drone-cov');
+        }
+    },
+
+    clearMapLayers() {
+        this.togglePath(false);
+        this.toggleCoverage(false);
+        this.clearTempMarkers();
+    },
+
+    showPointMarker(coords, label, color) {
+        this.clearTempMarkers();
+        const pathTog = document.getElementById('path-toggle');
+        if (pathTog && pathTog.checked) return;
+
+        const p = new maplibregl.Popup({ closeButton: true, closeOnClick: true, className: 'temp-marker-popup' })
+            .setLngLat(coords)
+            .setHTML(`<div style="background:#0f0f0f; color:${color}; padding:4px 8px; border-radius:4px; font-weight:bold; border:1px solid ${color};">${label}</div>`)
+            .addTo(window.map);
+
+        this.state.tempMarkers.push(p);
+
+        if (window.map) {
+            window.map.flyTo({ center: coords, zoom: 16, pitch: 0 });
+        }
+    },
+
+    clearTempMarkers() {
+        if (this.state.tempMarkers) {
+            this.state.tempMarkers.forEach(m => m.remove());
+            this.state.tempMarkers = [];
+        }
+    },
+
+    addPathLabel(coords, text) {
+        const el = document.createElement('div');
+        el.className = 'path-permanent-label';
+        el.innerHTML = `<div style="background:#000; color:#fff; padding:2px 6px; font-size:0.7rem; border-radius:3px; border:1px solid #444;">${text}</div>`;
+
+        new maplibregl.Marker({ element: el })
+            .setLngLat(coords)
+            .addTo(window.map);
+    },
+
     renderForestList(filter = "") {
         const container = document.getElementById('forest-list-container');
         if (!container) return;
@@ -295,201 +461,170 @@ const UI = {
         });
     },
 
-    updateRightSidebar(drone) {
-        // Trip Info
-        const info = (window.DRONE_DB.drones[drone.id] && window.DRONE_DB.drones[drone.id].trip) || {
-            start: '--', end: '--', distance: '--', air_time: '--', startCoords: null, endCoords: null
-        };
-
-        const startEl = document.getElementById('trip-start');
-        if (startEl) {
-            startEl.innerText = `[${info.start}]`;
-            startEl.style.cursor = 'pointer';
-            startEl.style.color = '#4aa8ff';
-            startEl.onclick = () => {
-                if (info.startCoords && window.map) {
-                    window.map.flyTo({ center: info.startCoords, zoom: 16, pitch: 0 });
-                }
-            };
-        }
-
-        const endEl = document.getElementById('trip-end');
-        if (endEl) {
-            endEl.innerText = `[${info.end}]`;
-            endEl.style.cursor = 'pointer';
-            endEl.style.color = '#4aa8ff';
-            endEl.onclick = () => {
-                if (info.endCoords && window.map) {
-                    window.map.flyTo({ center: info.endCoords, zoom: 16, pitch: 0 });
-                }
-            };
-        }
-
-        const distEl = document.getElementById('trip-dist');
-        if (distEl) distEl.innerText = info.distance;
-
-        const tAirEl = document.getElementById('trip-air');
-        if (tAirEl) tAirEl.innerText = info.air_time; // Fix reading from trip
-    },
-
-    clearMapLayers() {
-        const map = window.map;
-        if (!map) return;
-
-        // Path
-        if (map.getLayer('drone-path-line')) map.setLayoutProperty('drone-path-line', 'visibility', 'none');
-        if (map.getLayer('drone-path-pts')) map.setLayoutProperty('drone-path-pts', 'visibility', 'none');
-
-        // Coverage
-        if (map.getLayer('drone-coverage-fill')) map.removeLayer('drone-coverage-fill');
-        if (map.getLayer('drone-coverage-line')) map.removeLayer('drone-coverage-line');
-        if (map.getSource('drone-coverage')) map.removeSource('drone-coverage');
-    },
-
-    toggleCoverage(show) {
-        const map = window.map;
-        if (!map || !this.state.selectedDrone) return;
-
-        if (show) {
-            const dData = window.DRONE_DB.drones[this.state.selectedDrone];
-            // Safety check
-            if (!dData || !dData.trip || !dData.trip.startCoords) return;
-
-            // Use Drone's Start Coordinates for Coverage Center
-            const c = dData.trip.startCoords; // [lng, lat]
-            const d = 0.02; // Roughly 2km box
-
-            const poly = [
-                [c[0] - d, c[1] - d], [c[0] + d, c[1] - d],
-                [c[0] + d, c[1] + d], [c[0] - d, c[1] + d],
-                [c[0] - d, c[1] - d]
-            ];
-
-            const geojson = {
-                type: 'Feature', geometry: { type: 'Polygon', coordinates: [poly] }
-            };
-
-            // Remove existing if any (clean state)
-            if (map.getSource('drone-coverage')) {
-                map.getSource('drone-coverage').setData(geojson);
-            } else {
-                map.addSource('drone-coverage', { type: 'geojson', data: geojson });
-            }
-            map.addLayer({
-                id: 'drone-coverage-fill', type: 'fill', source: 'drone-coverage',
-                paint: { 'fill-color': '#00C851', 'fill-opacity': 0.15 }
-            });
-            map.addLayer({
-                id: 'drone-coverage-line', type: 'line', source: 'drone-coverage',
-                paint: { 'line-color': '#00C851', 'line-width': 1, 'line-dasharray': [2, 2] }
-            });
-
-        } else {
-            if (map.getLayer('drone-coverage-fill')) map.removeLayer('drone-coverage-fill');
-            if (map.getLayer('drone-coverage-line')) map.removeLayer('drone-coverage-line');
-            if (map.getSource('drone-coverage')) map.removeSource('drone-coverage');
-        }
-    },
-
-    togglePath(show) {
-        this.state.pathVisible = show;
-        const map = window.map;
-        if (!map) return;
-
-        if (show && this.state.selectedDrone) {
-            const dData = window.DRONE_DB.drones[this.state.selectedDrone];
-            if (!dData || !dData.trip || !dData.trip.startCoords) return;
-
-            const start = dData.trip.startCoords; // [lng, lat]
-            const end = dData.trip.endCoords;     // [lng, lat]
-
-            // Generate a curved path
-            const mid = [(start[0] + end[0]) / 2 + 0.002, (start[1] + end[1]) / 2 + 0.002]; // Slight curve
-
-            const geojson = {
-                type: 'Feature',
-                geometry: {
-                    type: 'LineString',
-                    coordinates: [start, mid, end]
-                }
-            };
-
-            // ... (rest of layer adding logic) ...
-            if (map.getSource('drone-path')) {
-                map.getSource('drone-path').setData(geojson);
-            } else {
-                map.addSource('drone-path', { type: 'geojson', data: geojson });
-                map.addLayer({
-                    id: 'drone-path-line', type: 'line', source: 'drone-path',
-                    paint: { 'line-color': '#ff6b35', 'line-width': 4, 'line-opacity': 0.8 }
-                });
-                map.addLayer({
-                    id: 'drone-path-pts', type: 'circle', source: 'drone-path',
-                    paint: { 'circle-radius': 6, 'circle-color': '#fff' }
-                });
-            }
-            if (map.getLayer('drone-path-line')) map.setLayoutProperty('drone-path-line', 'visibility', 'visible');
-            if (map.getLayer('drone-path-pts')) map.setLayoutProperty('drone-path-pts', 'visibility', 'visible');
-
-            // Fly to path
-            const bounds = new maplibregl.LngLatBounds();
-            geojson.geometry.coordinates.forEach(c => bounds.extend(c));
-            map.fitBounds(bounds, { padding: 40 });
-
-            // Add Hover Boxes (Popups) for Start/End
-            if (!this.state.pathMarkers) this.state.pathMarkers = [];
-            // Clear old ones first
-            this.state.pathMarkers.forEach(m => m.remove());
-            this.state.pathMarkers = [];
-
-            const p1 = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'path-label-popup' })
-                .setLngLat(start)
-                .setHTML('<div style="background:#0f0f0f; color:#4aa8ff; padding:4px 8px; border-radius:4px; font-weight:bold; border:1px solid #3e86c9ff;">Start</div>')
-                .addTo(map);
-
-            const p2 = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'path-label-popup' })
-                .setLngLat(end)
-                .setHTML('<div style="background:#0f0f0f; color:#ff6b35; padding:4px 8px; border-radius:4px; font-weight:bold; border:1px solid #b54720e4;">End</div>')
-                .addTo(map);
-
-            this.state.pathMarkers.push(p1, p2);
-
-        } else {
-            // Remove Popups
-            if (this.state.pathMarkers) {
-                this.state.pathMarkers.forEach(m => m.remove());
-                this.state.pathMarkers = [];
-            }
-
-            if (map.getLayer('drone-path-line')) {
-                map.setLayoutProperty('drone-path-line', 'visibility', 'none');
-                map.setLayoutProperty('drone-path-pts', 'visibility', 'none');
-            }
-        }
-    },
-
     closeBottomPanel() {
         const bottomPanel = document.getElementById('bottom-panel');
-        if (bottomPanel) {
-            bottomPanel.style.bottom = '-100%'; // Slide down
+        if (bottomPanel) bottomPanel.style.bottom = '-100%';
+        if (this.state.simInterval) clearInterval(this.state.simInterval);
+    },
+
+    toggleChargingMode(active) {
+        const hud = document.getElementById('charging-hud');
+        if (!hud) return;
+
+        if (active) {
+            hud.classList.add('active');
+
+            let pct = 0;
+            const txt = document.getElementById('charge-percent');
+            const liquid = document.getElementById('charge-liquid');
+
+            if (this.chargeInterval) clearInterval(this.chargeInterval);
+
+            this.chargeInterval = setInterval(() => {
+                pct++;
+                if (pct > 100) pct = 0;
+
+                if (txt) txt.innerText = pct + '%';
+
+                if (liquid) {
+                    liquid.style.height = pct + '%';
+                    if (pct < 30) liquid.style.background = 'linear-gradient(0deg, #4d0000, #ff0000)';
+                    else if (pct < 60) liquid.style.background = 'linear-gradient(0deg, #4d4d00, #ffff00)';
+                    else liquid.style.background = 'linear-gradient(0deg, #004d00, #00ff00)';
+                }
+            }, 100);
+
+        } else {
+            hud.classList.remove('active');
+            if (this.chargeInterval) clearInterval(this.chargeInterval);
         }
     },
 
-    // Toggle Modal
-    toggleVideoSize(maximize) {
-        const modal = document.getElementById('video-modal');
-        if (modal) {
-            if (maximize) modal.classList.add('active');
-            else modal.classList.remove('active');
+    toggleVideoSize(max) {
+        const m = document.getElementById('video-modal');
+        if (m) {
+            if (max) m.classList.add('active');
+            else m.classList.remove('active');
         }
     },
 
+    showAllDrones() {
+        if (!this.state.selectedDock) {
+            alert('Please select a docking station first');
+            return;
+        }
 
+        const modal = document.getElementById('all-drones-modal');
+        const grid = document.getElementById('all-drones-grid');
+
+        if (!modal || !grid) return;
+
+        const drones = window.DRONE_DB.docks[this.state.selectedDock] || [];
+
+        // Clear existing content
+        grid.innerHTML = '';
+
+        // Video mapping
+        const vidMap = {
+            1: 'drone-gif.mp4',
+            2: 'drone-video2.mp4',
+            3: 'drone-video3.mp4',
+            4: 'drrone-video4.mp4',
+            5: 'drone-video5.mp4'
+        };
+
+        // Create grid items for each drone
+        drones.forEach(drone => {
+            const isCharging = drone.status === 'Charging';
+            const videoFile = vidMap[drone.video_id] || 'drone-gif.mp4';
+
+            const gridItem = document.createElement('div');
+            gridItem.style.cssText = `
+                background: #141414;
+                border: 1px solid #1f1f1f;
+                border-radius: 8px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            `;
+
+            gridItem.innerHTML = `
+                <div style="padding: 10px; background: #111; border-bottom: 1px solid #1f1f1f; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #ff6b35; font-weight: 600; font-size: 0.9rem;">${drone.id}</span>
+                    <span style="color: ${isCharging ? '#00C851' : '#888'}; font-size: 0.75rem; text-transform: uppercase;">${drone.status}</span>
+                </div>
+                <div style="position: relative; width: 100%; height: 200px; background: #000;">
+                    ${isCharging ?
+                    `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#00C851; font-size:0.9rem;">⚡ CHARGING</div>` :
+                    `<video src="../assets/img/${videoFile}" autoplay loop muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>`
+                }
+                </div>
+                <div style="padding: 8px; background: #111; display: flex; justify-content: space-between; font-size: 0.75rem;">
+                    <span style="color: #888;">Battery: <span style="color: ${isCharging ? '#00C851' : '#fff'};">${isCharging ? 'Charging...' : Math.floor(drone.batt) + '%'}</span></span>
+                    <span style="color: #888;">Speed: <span style="color: #fff;">${isCharging ? '--' : drone.telemetry.speed + ' km/h'}</span></span>
+                </div>
+            `;
+
+            grid.appendChild(gridItem);
+        });
+
+        modal.classList.add('active');
+    },
+
+    closeAllDrones() {
+        const modal = document.getElementById('all-drones-modal');
+        if (modal) modal.classList.remove('active');
+    },
+
+    togglePathButton() {
+        this.state.pathVisible = !this.state.pathVisible;
+        const btn = document.getElementById('path-toggle-btn');
+
+        if (this.state.pathVisible) {
+            // Active state
+            if (btn) {
+                btn.style.background = 'rgba(255,107,53,0.2)';
+                btn.style.borderColor = '#ff6b35';
+                btn.style.color = '#ff6b35';
+            }
+            this.togglePath(true);
+        } else {
+            // Inactive state
+            if (btn) {
+                btn.style.background = '#1a1a1a';
+                btn.style.borderColor = '#333';
+                btn.style.color = '#ccc';
+            }
+            this.togglePath(false);
+        }
+    },
+
+    toggleCoverageButton() {
+        this.state.coverageVisible = !this.state.coverageVisible;
+        const btn = document.getElementById('coverage-toggle-btn');
+
+        if (this.state.coverageVisible) {
+            // Active state
+            if (btn) {
+                btn.style.background = 'rgba(255,107,53,0.2)';
+                btn.style.borderColor = '#ff6b35';
+                btn.style.color = '#ff6b35';
+            }
+            this.toggleCoverage(true);
+        } else {
+            // Inactive state
+            if (btn) {
+                btn.style.background = '#1a1a1a';
+                btn.style.borderColor = '#333';
+                btn.style.color = '#ccc';
+            }
+            this.toggleCoverage(false);
+        }
+    }
 };
 
-window.DroneUI = UI;
-
-// Init on load
 window.addEventListener('DOMContentLoaded', () => {
     UI.init();
 });
+
+window.DroneUI = UI;
