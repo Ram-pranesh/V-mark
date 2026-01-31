@@ -49,6 +49,12 @@
         if (map.getLayer("sentinel-2")) map.setLayoutProperty("sentinel-2", "visibility", "none");
       }
     }
+
+    // --- CRITICAL FIX: Ensure Fire API Layers stay on top ---
+    // Raster overlays (Roadmap/Contours) can occlude points if they are higher in the stack.
+    // We force the fire points to the very top after every switch.
+    if (map.getLayer('fire-glow')) map.moveLayer('fire-glow');
+    if (map.getLayer('fire-points')) map.moveLayer('fire-points');
   }
 
   window.setMapView = setMapView;
