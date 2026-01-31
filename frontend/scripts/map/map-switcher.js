@@ -57,7 +57,7 @@
   mapSelectorContainer.className = "floating-map-selector";
   Object.assign(mapSelectorContainer.style, {
     position: "absolute",
-    top: "15px",
+    top: "20px",
     right: "180px",
     zIndex: 10,
     background: "#ffffff",
@@ -68,8 +68,8 @@
     alignItems: "center",
     color: "#000000"
   });
-  // Enforce 3D Globe mode
-  map.setProjection({ type: "globe" });
+  // Enforce 2D Mercator mode to prevent errors
+  map.setProjection({ type: "mercator" });
   map.setTerrain({ source: "terrainSource", exaggeration: 1.5 });
   map.easeTo({ pitch: 0 });
   document.body.appendChild(mapSelectorContainer);

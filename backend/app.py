@@ -5,7 +5,14 @@ from dotenv import load_dotenv
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(BASE_DIR, "backend", ".env")) # Load from backend/.env explicitly if needed, or just .env
+
+# Import Workflow
+try:
+    from utils.workflow import run_fire_verification_workflow
+except ImportError as e:
+    print(f"Warning: Could not import workflow: {e}")
+    run_fire_verification_workflow = None
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 
@@ -164,11 +171,35 @@ def sentinelhub_token():
         "client_id": client_id,
         "client_secret": client_secret,
     }
-    response = requests.post(token_url, data=data, timeout=20)
-    if response.status_code != 200:
-        return jsonify({"error": "Token request failed", "details": response.text}), 502
+    try:
+        response = requests.post(token_url, data=data, timeout=20)
+        if response.status_code != 200:
+            return jsonify({"error": "Token request failed", "details": response.text}), 502
+    except requests.RequestException as exc:
+         return jsonify({"error": "Token request failed", "details": str(exc)}), 502
 
     return jsonify(response.json())
+
+
+@app.post("/api/verify-fire")
+def verify_fire():
+    data = request.json
+    lat = data.get("lat")
+    lon = data.get("lon")
+
+    if not lat or not lon:
+        return jsonify({"error": "Missing lat/lon parameters"}), 400
+
+    if not run_fire_verification_workflow:
+        return jsonify({"error": "Workflow module not loaded correctly"}), 500
+
+    simulate = data.get("simulate", False)
+
+    try:
+        result = run_fire_verification_workflow(lat, lon, simulate=simulate)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": "Workflow failed", "details": str(e)}), 500
 
 
 @app.get("/<path:filename>")

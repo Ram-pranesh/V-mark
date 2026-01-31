@@ -6,7 +6,6 @@
   map.addControl(new maplibregl.NavigationControl(), "top-right");
   map.addControl(new maplibregl.ScaleControl(), "bottom-left");
   map.addControl(new maplibregl.FullscreenControl(), "top-right");
-  map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
 
   // Sidebar tool integration
   const measureBtn = document.getElementById("sidebar-measure-btn");
@@ -52,6 +51,7 @@
     clearRouteMarkers();
     closeGhost();
     removePopup();
+    if (typeof clearRouteArrows === 'function') clearRouteArrows();
     if (map.getSource("route-geo")) {
       map.getSource("route-geo").setData(emptyFeatureCollection());
     }
@@ -365,14 +365,14 @@
       routeInfo.style.display = "none"; // Ensure sidebar is hidden
     }
 
-    // Update marker badges
-    updateBadge(startMarker, `Start: ${start[1].toFixed(4)}, ${start[0].toFixed(4)}`, "#0fa958");
-    updateBadge(endMarker, `End: ${end[1].toFixed(4)}, ${end[0].toFixed(4)}`, "#d83b3b");
+    // Update marker badges - DISABLE for auto-route to keep clean pins
+    // updateBadge(startMarker, `Start: ${start[1].toFixed(4)}, ${start[0].toFixed(4)}`, "#0fa958");
+    // updateBadge(endMarker, `End: ${end[1].toFixed(4)}, ${end[0].toFixed(4)}`, "#d83b3b");
 
     map.setLayoutProperty("route-line", "visibility", "none");
     map.getSource("route-geo").setData(emptyFeatureCollection());
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${start[0]},${start[1]};${end[0]},${end[1]}?overview=full&geometries=geojson`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${start[0]},${start[1]};${end[0]},${end[1]}?overview=full&geometries=geojson&steps=true`;
 
     fetch(url)
       .then((r) => r.json())
@@ -381,24 +381,63 @@
 
         const route = data.routes[0];
         const coords = route.geometry.coordinates;
+        const steps = route.legs[0].steps;
+        
+        // Store route data for navigation
+        window.routeData = { route, steps, coords, start, end };
+        
         map.getSource("route-geo").setData({ type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }] });
         map.setLayoutProperty("route-line", "visibility", "visible");
+        
+        // Add direction arrows along the route
+        addRouteArrows(coords);
 
         // Calculate metrics
         const distKm = (route.distance / 1000).toFixed(2);
         const durMin = (route.duration / 60).toFixed(0);
+        const durHours = Math.floor(route.duration / 3600);
+        const durMins = Math.floor((route.duration % 3600) / 60);
+        const timeDisplay = durHours > 0 ? `${durHours}h ${durMins}m` : `${durMins} min`;
 
-        // Show Popup on Map
+        // Show Enhanced Popup on Map
         const midIdx = Math.floor(coords.length / 2);
         const midPt = coords[midIdx];
 
         const content = `
-             <div style="font-family:'Segoe UI',sans-serif; color:#111; padding:6px; min-width:160px;">
-               <div style="font-size:14px; font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:4px; text-align:center;">Route Details</div>
-               <div style="font-size:12px; margin-bottom:2px;"><b>Start:</b> ${start[1].toFixed(5)}, ${start[0].toFixed(5)}</div>
-               <div style="font-size:12px; margin-bottom:2px;"><b>End:</b> ${end[1].toFixed(5)}, ${end[0].toFixed(5)}</div>
-               <hr style="margin:4px 0; border:0; border-top:1px solid #ddd;">
-               <div style="font-size:13px;">Distance: <b>${distKm} km</b></div>
+             <div style="font-family:'Inter','Segoe UI',sans-serif; background: linear-gradient(135deg, rgba(15,15,15,0.98), rgba(25,25,35,0.98)); color:#fff; padding:0; min-width:280px; border-radius:12px; overflow:hidden;">
+               <div style="background: linear-gradient(135deg, #ff6b35, #ff8c42); padding:16px 20px; display:flex; align-items:center; gap:12px;">
+                 <span class="material-icons-round" style="font-size:28px; color:#fff;">navigation</span>
+                 <div>
+                   <div style="font-size:16px; font-weight:700; color:#fff;">Route Found</div>
+                   <div style="font-size:12px; color:rgba(255,255,255,0.9);">${steps.length} steps</div>
+                 </div>
+               </div>
+               
+               <div style="padding:16px 20px;">
+                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                   <div style="background:rgba(255,107,53,0.1); padding:12px; border-radius:8px; border:1px solid rgba(255,107,53,0.3);">
+                     <div style="font-size:11px; color:rgba(255,255,255,0.6); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Distance</div>
+                     <div style="font-size:20px; font-weight:700; color:#ff6b35;">${distKm}<span style="font-size:12px; font-weight:500;"> km</span></div>
+                   </div>
+                   <div style="background:rgba(74,168,255,0.1); padding:12px; border-radius:8px; border:1px solid rgba(74,168,255,0.3);">
+                     <div style="font-size:11px; color:rgba(255,255,255,0.6); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Duration</div>
+                     <div style="font-size:20px; font-weight:700; color:#4aa8ff;">${timeDisplay}</div>
+                   </div>
+                 </div>
+                 
+                 <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; margin-bottom:16px;">
+                   <div style="font-size:11px; color:rgba(255,255,255,0.5); margin-bottom:6px;">FROM</div>
+                   <div style="font-size:12px; color:rgba(255,255,255,0.9); margin-bottom:8px;">${start[1].toFixed(4)}, ${start[0].toFixed(4)}</div>
+                   <div style="height:1px; background:rgba(255,255,255,0.1); margin:8px 0;"></div>
+                   <div style="font-size:11px; color:rgba(255,255,255,0.5); margin-bottom:6px;">TO</div>
+                   <div style="font-size:12px; color:rgba(255,255,255,0.9);">${end[1].toFixed(4)}, ${end[0].toFixed(4)}</div>
+                 </div>
+                 
+                 <button onclick="startNavigation()" style="width:100%; background:linear-gradient(135deg, #0fa958, #0c8a47); color:#fff; border:none; padding:16px; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; transition:all 0.2s; box-shadow:0 4px 12px rgba(15,169,88,0.3); font-family:'Inter','Segoe UI',sans-serif;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(15,169,88,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(15,169,88,0.3)';">
+                   <span class="material-icons-round" style="font-size:22px;">directions</span>
+                   <span>Start Navigation</span>
+                 </button>
+               </div>
              </div>
            `;
 
@@ -406,9 +445,10 @@
         currentPopup = new maplibregl.Popup({
           closeButton: true,
           closeOnClick: false,
-          className: 'tool-popup',
-          anchor: 'bottom', // Show above the point
-          offset: [0, -10]
+          className: 'tool-popup route-popup',
+          anchor: 'bottom',
+          offset: [0, -10],
+          maxWidth: '320px'
         })
           .setLngLat(midPt)
           .setHTML(content)
@@ -419,20 +459,97 @@
         const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
         map.fitBounds(bounds, { padding: 80 });
       })
-      .catch(() => {
-        // Show error on map
+      .catch((err) => {
+        console.error('Route calculation failed:', err);
+        
+        // Calculate straight-line distance for fallback
+        const dx = (end[0] - start[0]) * 111.32 * Math.cos((start[1] * Math.PI) / 180);
+        const dy = (end[1] - start[1]) * 111.32;
+        const straightDist = Math.sqrt(dx * dx + dy * dy).toFixed(2);
+        
+        // Show enhanced error with options
         removePopup();
         currentPopup = new maplibregl.Popup({
           closeButton: true,
-          className: 'tool-popup',
-          anchor: 'bottom', // Show above the point
-          offset: [0, -10]
+          closeOnClick: false,
+          className: 'tool-popup route-popup',
+          anchor: 'bottom',
+          offset: [0, -10],
+          maxWidth: '340px'
         })
-          .setLngLat(end) // Show at end point
-          .setHTML(`<div style="color:red; padding:5px;"><b>Route Unavailable</b><br>Could not calculate path in this area.</div>`)
+          .setLngLat(end)
+          .setHTML(`
+            <div style="font-family:'Inter','Segoe UI',sans-serif; background: linear-gradient(135deg, rgba(25,15,15,0.98), rgba(40,20,20,0.98)); color:#fff; padding:0; border-radius:12px; overflow:hidden;">
+              <div style="background: linear-gradient(135deg, #dc3545, #c82333); padding:18px 20px; display:flex; align-items:center; gap:12px;">
+                <span class="material-icons-round" style="font-size:32px; color:#fff;">error_outline</span>
+                <div>
+                  <div style="font-size:16px; font-weight:700; color:#fff;">Route Unavailable</div>
+                  <div style="font-size:12px; color:rgba(255,255,255,0.9);">No roads found in this area</div>
+                </div>
+              </div>
+              
+              <div style="padding:20px;">
+                <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; margin-bottom:16px;">
+                  <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-bottom:8px;">This might be due to:</div>
+                  <div style="font-size:13px; color:#fff; line-height:1.6;">
+                    • Remote area with no mapped roads<br>
+                    • Ocean or water crossing<br>
+                    • Protected wilderness zone
+                  </div>
+                </div>
+                
+                <div style="background:rgba(74,168,255,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border:1px solid rgba(74,168,255,0.3);">
+                  <div style="font-size:11px; color:rgba(255,255,255,0.6); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Straight-Line Distance</div>
+                  <div style="font-size:20px; font-weight:700; color:#4aa8ff;">${straightDist}<span style="font-size:12px; font-weight:500;"> km</span></div>
+                </div>
+                
+                <button onclick="openGoogleMapsRoute()" style="width:100%; background:linear-gradient(135deg, #4285f4, #3367d6); color:#fff; border:none; padding:14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; transition:all 0.2s; box-shadow:0 4px 12px rgba(66,133,244,0.3); font-family:'Inter','Segoe UI',sans-serif; margin-bottom:10px;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(66,133,244,0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(66,133,244,0.3)';">
+                  <span class="material-icons-round" style="font-size:20px;">map</span>
+                  <span>Open in Google Maps</span>
+                </button>
+                
+                <div style="text-align:center; font-size:11px; color:rgba(255,255,255,0.5);">Use external navigation for this route</div>
+              </div>
+            </div>
+          `)
           .addTo(map);
       });
   }
+
+  // Expose for external calls (e.g. from Alert Center)
+  // Expose for external calls (e.g. from Alert Center)
+  window.calculateRoute = function (start, end) {
+    console.log("Calculating Route:", start, end);
+
+    // Ensure start/end are valid arrays
+    if (!start || !end || start.length < 2 || end.length < 2) {
+      console.error("Invalid route coordinates", start, end);
+      return;
+    }
+
+    // Reset existing route visual
+    resetRoute();
+
+    // Use markerBadge for visible labels
+    try {
+      if (startMarker) startMarker.remove();
+      startMarker = markerBadge("Start", "#0fa958");
+      startMarker.setLngLat(start).addTo(map);
+
+      if (endMarker) endMarker.remove();
+      endMarker = markerBadge("End", "#d83b3b");
+      endMarker.setLngLat(end).addTo(map);
+
+      // Fit bounds immediately so user sees points even if route fails
+      const bounds = new maplibregl.LngLatBounds(start, start);
+      bounds.extend(end);
+      map.fitBounds(bounds, { padding: 100, maxZoom: 14 });
+    } catch (err) {
+      console.error("Error adding route markers:", err);
+    }
+
+    fetchRoute(start, end);
+  };
 
   function toggleRoute() {
     if (routing) {
@@ -583,6 +700,159 @@
     return 2 * R * Math.asin(Math.sqrt(h));
   }
 
+  // Add directional arrows along the route
+  let routeArrowMarkers = [];
+  
+  function addRouteArrows(coords) {
+    // Clear existing arrows
+    routeArrowMarkers.forEach(marker => marker.remove());
+    routeArrowMarkers = [];
+
+    // Create animated arrow layer using MapLibre symbols
+    if (map.getSource('route-arrows')) {
+      map.removeLayer('route-arrows-layer');
+      map.removeSource('route-arrows');
+    }
+
+    // Create points along the route every 50 coords for animation
+    const arrowPoints = [];
+    const step = Math.max(10, Math.floor(coords.length / 20)); // About 20 arrows
+    
+    for (let i = 0; i < coords.length - step; i += step) {
+      const start = coords[i];
+      const end = coords[i + step];
+      
+      // Calculate bearing
+      const bearing = Math.atan2(end[0] - start[0], end[1] - start[1]) * (180 / Math.PI);
+      
+      arrowPoints.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: start
+        },
+        properties: {
+          bearing: bearing
+        }
+      });
+    }
+
+    // Add source and layer for animated arrows
+    map.addSource('route-arrows', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: arrowPoints
+      }
+    });
+
+    map.addLayer({
+      id: 'route-arrows-layer',
+      type: 'symbol',
+      source: 'route-arrows',
+      layout: {
+        'icon-image': 'arrow', // We'll create this programmatically
+        'icon-size': 0.6,
+        'icon-rotate': ['get', 'bearing'],
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true
+      },
+      paint: {
+        'icon-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          5, 0.6,
+          15, 0.9
+        ]
+      }
+    });
+
+    // Animate arrows by updating their positions
+    let animationOffset = 0;
+    const animateArrows = () => {
+      animationOffset = (animationOffset + 1) % step;
+      
+      const updatedPoints = [];
+      for (let i = 0; i < coords.length - step; i += step) {
+        const idx = Math.min(i + animationOffset, coords.length - step);
+        const start = coords[idx];
+        const end = coords[Math.min(idx + step, coords.length - 1)];
+        
+        const bearing = Math.atan2(end[0] - start[0], end[1] - start[1]) * (180 / Math.PI);
+        
+        updatedPoints.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: start
+          },
+          properties: {
+            bearing: bearing
+          }
+        });
+      }
+      
+      if (map.getSource('route-arrows')) {
+        map.getSource('route-arrows').setData({
+          type: 'FeatureCollection',
+          features: updatedPoints
+        });
+      }
+      
+      if (window.routeAnimationActive) {
+        requestAnimationFrame(animateArrows);
+      }
+    };
+    
+    // Create arrow SVG icon
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw arrow
+    ctx.fillStyle = '#4aa8ff';
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    
+    ctx.beginPath();
+    ctx.moveTo(size / 2, size * 0.2);
+    ctx.lineTo(size * 0.7, size * 0.5);
+    ctx.lineTo(size * 0.6, size * 0.5);
+    ctx.lineTo(size * 0.6, size * 0.8);
+    ctx.lineTo(size * 0.4, size * 0.8);
+    ctx.lineTo(size * 0.4, size * 0.5);
+    ctx.lineTo(size * 0.3, size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add to map as icon
+    if (!map.hasImage('arrow')) {
+      map.addImage('arrow', canvas);
+    }
+    
+    // Start animation
+    window.routeAnimationActive = true;
+    requestAnimationFrame(animateArrows);
+  }
+  
+  function clearRouteArrows() {
+    window.routeAnimationActive = false;
+    routeArrowMarkers.forEach(marker => marker.remove());
+    routeArrowMarkers = [];
+    
+    if (map.getLayer('route-arrows-layer')) {
+      map.removeLayer('route-arrows-layer');
+    }
+    if (map.getSource('route-arrows')) {
+      map.removeSource('route-arrows');
+    }
+  }
+
   function markerBadge(text, color) {
     const el = document.createElement("div");
     el.textContent = text;
@@ -616,93 +886,392 @@
     return Math.abs((area * R * R) / 2);
   }
 
-  // Search Bar
+  // Enhanced Search Bar with Autocomplete
+  const searchWrapper = document.createElement("div");
+  Object.assign(searchWrapper.style, {
+    position: "absolute",
+    top: "20px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 10,
+    width: "400px"
+  });
+
   const searchContainer = document.createElement("div");
   Object.assign(searchContainer.style, {
-    position: "absolute",
-    top: "15px",
-    right: "390px",
-    zIndex: 10,
-    background: "#222",
-    borderRadius: "20px",
+    background: "rgba(15, 15, 15, 0.75)",
+    backdropFilter: "blur(20px)",
+    borderRadius: "18px",
     display: "flex",
     alignItems: "center",
-    padding: "0 8px",
-    height: "32px",
-    border: "1px solid #ff6b35", // Orange border
-    boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
+    padding: "8px 16px",
+    height: "48px",
+    border: "1px solid rgba(255, 255, 255, 0.15)",
+    boxShadow: "0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 107, 53, 0.2)",
+    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+  });
+
+  const searchIcon = document.createElement("span");
+  searchIcon.className = "material-icons-round";
+  searchIcon.textContent = "search";
+  Object.assign(searchIcon.style, {
+    color: "rgba(255, 255, 255, 0.5)",
+    fontSize: "20px",
+    marginRight: "12px",
+    transition: "color 0.2s"
   });
 
   const searchInput = document.createElement("input");
-  searchInput.placeholder = "Search location...";
+  searchInput.placeholder = "Search places, cities, coordinates...";
   Object.assign(searchInput.style, {
     background: "transparent",
     border: "none",
     color: "#fff",
-    fontSize: "13px",
-    width: "140px",
+    fontSize: "14px",
+    flex: "1",
     outline: "none",
-    fontFamily: "inherit"
+    fontFamily: "inherit",
+    fontWeight: "400"
+  });
+
+  const clearBtn = document.createElement("span");
+  clearBtn.className = "material-icons-round";
+  clearBtn.textContent = "close";
+  Object.assign(clearBtn.style, {
+    color: "rgba(255, 255, 255, 0.4)",
+    cursor: "pointer",
+    fontSize: "18px",
+    marginLeft: "8px",
+    display: "none",
+    transition: "all 0.2s"
   });
 
   const searchBtn = document.createElement("span");
   searchBtn.className = "material-icons-round";
-  searchBtn.textContent = "search";
+  searchBtn.textContent = "my_location";
   Object.assign(searchBtn.style, {
     color: "#ff6b35",
     cursor: "pointer",
-    fontSize: "18px",
-    marginLeft: "4px"
+    fontSize: "20px",
+    marginLeft: "8px",
+    transition: "all 0.2s",
+    padding: "4px",
+    borderRadius: "8px"
   });
 
+  searchContainer.appendChild(searchIcon);
   searchContainer.appendChild(searchInput);
+  searchContainer.appendChild(clearBtn);
   searchContainer.appendChild(searchBtn);
-  document.body.appendChild(searchContainer);
+  searchWrapper.appendChild(searchContainer);
 
-  const doSearch = () => {
-    const q = searchInput.value;
-    if (!q) return;
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`)
+  // Autocomplete dropdown
+  const autocompleteDropdown = document.createElement("div");
+  Object.assign(autocompleteDropdown.style, {
+    background: "rgba(15, 15, 15, 0.85)",
+    backdropFilter: "blur(20px)",
+    borderRadius: "16px",
+    marginTop: "8px",
+    border: "1px solid rgba(255, 255, 255, 0.15)",
+    boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+    maxHeight: "320px",
+    overflowY: "auto",
+    display: "none",
+    animation: "fadeIn 0.2s ease-out"
+  });
+
+  searchWrapper.appendChild(autocompleteDropdown);
+  document.body.appendChild(searchWrapper);
+
+  // Hover effects
+  searchContainer.addEventListener("mouseenter", () => {
+    searchContainer.style.border = "1px solid rgba(255, 107, 53, 0.4)";
+    searchContainer.style.boxShadow = "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255, 107, 53, 0.3)";
+    searchIcon.style.color = "#ff6b35";
+  });
+  searchContainer.addEventListener("mouseleave", () => {
+    if (document.activeElement !== searchInput) {
+      searchContainer.style.border = "1px solid rgba(255, 255, 255, 0.15)";
+      searchContainer.style.boxShadow = "0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 107, 53, 0.2)";
+      searchIcon.style.color = "rgba(255, 255, 255, 0.5)";
+    }
+  });
+
+  searchInput.addEventListener("focus", () => {
+    searchContainer.style.border = "1px solid rgba(255, 107, 53, 0.5)";
+    searchContainer.style.boxShadow = "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255, 107, 53, 0.4)";
+    searchIcon.style.color = "#ff6b35";
+  });
+
+  searchInput.addEventListener("blur", () => {
+    setTimeout(() => {
+      searchContainer.style.border = "1px solid rgba(255, 255, 255, 0.15)";
+      searchContainer.style.boxShadow = "0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 107, 53, 0.2)";
+      searchIcon.style.color = "rgba(255, 255, 255, 0.5)";
+      autocompleteDropdown.style.display = "none";
+    }, 200);
+  });
+
+  searchBtn.addEventListener("mouseenter", () => {
+    searchBtn.style.background = "rgba(255, 107, 53, 0.15)";
+    searchBtn.style.transform = "scale(1.1)";
+  });
+  searchBtn.addEventListener("mouseleave", () => {
+    searchBtn.style.background = "transparent";
+    searchBtn.style.transform = "scale(1)";
+  });
+
+  clearBtn.addEventListener("mouseenter", () => {
+    clearBtn.style.color = "#ff6b35";
+  });
+  clearBtn.addEventListener("mouseleave", () => {
+    clearBtn.style.color = "rgba(255, 255, 255, 0.4)";
+  });
+
+  // Clear button functionality
+  clearBtn.addEventListener("click", () => {
+    searchInput.value = "";
+    clearBtn.style.display = "none";
+    autocompleteDropdown.style.display = "none";
+    searchInput.focus();
+  });
+
+  let debounceTimer;
+  let selectedIndex = -1;
+  let suggestions = [];
+
+  // Debounced autocomplete
+  searchInput.addEventListener("input", () => {
+    const query = searchInput.value.trim();
+    clearBtn.style.display = query ? "block" : "none";
+
+    if (!query) {
+      autocompleteDropdown.style.display = "none";
+      return;
+    }
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      fetchSuggestions(query);
+    }, 300);
+  });
+
+  function fetchSuggestions(query) {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=8&addressdetails=1`)
       .then(r => r.json())
       .then(data => {
         if (data && data.length > 0) {
-          const res = data[0];
-          map.flyTo({
-            center: [parseFloat(res.lon), parseFloat(res.lat)],
-            zoom: 12
-          });
+          suggestions = data;
+          displaySuggestions(data);
+        } else {
+          autocompleteDropdown.style.display = "none";
         }
       })
       .catch(e => console.error(e));
+  }
+
+  function displaySuggestions(data) {
+    autocompleteDropdown.innerHTML = "";
+    selectedIndex = -1;
+
+    data.forEach((item, index) => {
+      const suggestionItem = document.createElement("div");
+      Object.assign(suggestionItem.style, {
+        padding: "14px 18px",
+        cursor: "pointer",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        transition: "all 0.2s"
+      });
+
+      const icon = document.createElement("span");
+      icon.className = "material-icons-round";
+      icon.textContent = getPlaceIcon(item.type);
+      Object.assign(icon.style, {
+        color: "#ff6b35",
+        fontSize: "20px",
+        flexShrink: "0"
+      });
+
+      const textContainer = document.createElement("div");
+      Object.assign(textContainer.style, {
+        flex: "1",
+        overflow: "hidden"
+      });
+
+      const title = document.createElement("div");
+      title.textContent = item.display_name.split(",")[0];
+      Object.assign(title.style, {
+        color: "#fff",
+        fontSize: "14px",
+        fontWeight: "500",
+        marginBottom: "4px",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      });
+
+      const subtitle = document.createElement("div");
+      subtitle.textContent = item.display_name.split(",").slice(1).join(",").trim();
+      Object.assign(subtitle.style, {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: "12px",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      });
+
+      textContainer.appendChild(title);
+      textContainer.appendChild(subtitle);
+      suggestionItem.appendChild(icon);
+      suggestionItem.appendChild(textContainer);
+
+      suggestionItem.addEventListener("mouseenter", () => {
+        suggestionItem.style.background = "rgba(255, 107, 53, 0.1)";
+        suggestionItem.style.borderLeft = "3px solid #ff6b35";
+        suggestionItem.style.paddingLeft = "15px";
+      });
+
+      suggestionItem.addEventListener("mouseleave", () => {
+        suggestionItem.style.background = "transparent";
+        suggestionItem.style.borderLeft = "none";
+        suggestionItem.style.paddingLeft = "18px";
+      });
+
+      suggestionItem.addEventListener("click", () => {
+        selectSuggestion(item);
+      });
+
+      autocompleteDropdown.appendChild(suggestionItem);
+    });
+
+    autocompleteDropdown.style.display = "block";
+  }
+
+  function getPlaceIcon(type) {
+    const iconMap = {
+      city: "location_city",
+      town: "location_city",
+      village: "holiday_village",
+      administrative: "public",
+      country: "flag",
+      state: "map",
+      county: "landscape",
+      municipality: "home",
+      suburb: "home_work",
+      neighbourhood: "apartment"
+    };
+    return iconMap[type] || "place";
+  }
+
+  function selectSuggestion(item) {
+    searchInput.value = item.display_name.split(",")[0];
+    autocompleteDropdown.style.display = "none";
+    map.flyTo({
+      center: [parseFloat(item.lon), parseFloat(item.lat)],
+      zoom: 13,
+      duration: 1500,
+      essential: true
+    });
+
+    // Add marker at selected location
+    new maplibregl.Popup({ closeButton: false, offset: 25 })
+      .setLngLat([parseFloat(item.lon), parseFloat(item.lat)])
+      .setHTML(`<div style="color: #fff; font-size: 13px; font-weight: 500;">${item.display_name.split(",")[0]}</div>`)
+      .addTo(map);
+  }
+
+  const doSearch = () => {
+    const q = searchInput.value.trim();
+    if (!q) return;
+
+    if (suggestions.length > 0) {
+      selectSuggestion(suggestions[0]);
+    } else {
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            selectSuggestion(data[0]);
+          }
+        })
+        .catch(e => console.error(e));
+    }
   };
 
+  // Keyboard navigation
+  searchInput.addEventListener("keydown", (e) => {
+    const items = autocompleteDropdown.children;
+    
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (autocompleteDropdown.style.display === "block") {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateSelectedItem(items);
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (autocompleteDropdown.style.display === "block") {
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        updateSelectedItem(items);
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+        selectSuggestion(suggestions[selectedIndex]);
+      } else {
+        doSearch();
+      }
+    } else if (e.key === "Escape") {
+      autocompleteDropdown.style.display = "none";
+      selectedIndex = -1;
+    }
+  });
+
+  function updateSelectedItem(items) {
+    Array.from(items).forEach((item, index) => {
+      if (index === selectedIndex) {
+        item.style.background = "rgba(255, 107, 53, 0.15)";
+        item.style.borderLeft = "3px solid #ff6b35";
+        item.style.paddingLeft = "15px";
+        item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        item.style.background = "transparent";
+        item.style.borderLeft = "none";
+        item.style.paddingLeft = "18px";
+      }
+    });
+  }
+
   searchBtn.onclick = doSearch;
-  searchInput.onkeydown = (e) => { if (e.key === "Enter") doSearch(); };
 
   if (typeof StackControl !== 'undefined') {
     map.addControl(new StackControl(), "top-right");
   }
 
   // 2D/3D Terrain Toggle Slider (Redesigned)
-  let is3D = true;
+  let is3D = false;
 
   const toggleContainer = document.createElement("div");
   Object.assign(toggleContainer.style, {
     position: "absolute",
     top: "20px",
-    right: "90px", // Between Nav (0-50px) and Sat (180px)
+    right: "90px",
     zIndex: 10,
-    background: "#222",
+    background: "rgba(15, 15, 15, 0.6)",
+    backdropFilter: "blur(12px)",
     borderRadius: "20px",
-    width: "58px",
-    height: "32px",
+    width: "60px",
+    height: "34px",
     cursor: "pointer",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
     display: "flex",
     alignItems: "center",
     padding: "2px",
-    border: "1px solid #444",
-    transition: "background 0.2s"
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    transition: "all 0.2s"
   });
 
   const sliderKnob = document.createElement("div");
@@ -756,11 +1325,204 @@
     }
   };
 
-  setMode(true); // Init
+  setMode(false); // Init to 2D by default
 
   toggleContainer.addEventListener("click", () => {
     setMode(!is3D);
   });
 
   document.body.appendChild(toggleContainer);
+
+  // Navigation System
+  let navigationActive = false;
+  let currentStepIndex = 0;
+  let navigationPanel = null;
+
+  // Google Maps fallback for unavailable routes
+  window.openGoogleMapsRoute = function() {
+    if (!window.routeData) {
+      const start = startMarker ? startMarker.getLngLat() : null;
+      const end = endMarker ? endMarker.getLngLat() : null;
+      
+      if (start && end) {
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&travelmode=driving`;
+        window.open(url, '_blank');
+      } else {
+        alert('Could not get route coordinates');
+      }
+    } else {
+      const start = window.routeData.start;
+      const end = window.routeData.end;
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${start[1]},${start[0]}&destination=${end[1]},${end[0]}&travelmode=driving`;
+      window.open(url, '_blank');
+    }
+  };
+
+  window.startNavigation = function() {
+    if (!window.routeData) {
+      alert("No route data available");
+      return;
+    }
+
+    navigationActive = true;
+    currentStepIndex = 0;
+    
+    // Close route popup
+    if (currentPopup) {
+      currentPopup.remove();
+      currentPopup = null;
+    }
+
+    // Create navigation panel
+    showNavigationPanel();
+    updateNavigationStep();
+  };
+
+  function showNavigationPanel() {
+    if (navigationPanel) {
+      navigationPanel.remove();
+    }
+
+    navigationPanel = document.createElement('div');
+    Object.assign(navigationPanel.style, {
+      position: 'fixed',
+      bottom: '20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: '90%',
+      maxWidth: '600px',
+      background: 'rgba(15, 15, 15, 0.98)',
+      backdropFilter: 'blur(20px)',
+      borderRadius: '20px',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+      zIndex: '10000',
+      padding: '0',
+      overflow: 'hidden'
+    });
+
+    navigationPanel.innerHTML = `
+      <div style="background: linear-gradient(135deg, #0fa958, #0c8a47); padding:20px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:16px; flex:1;">
+          <span class="material-icons-round" id="nav-icon" style="font-size:40px; color:#fff;">navigation</span>
+          <div style="flex:1;">
+            <div id="nav-instruction" style="font-size:18px; font-weight:600; color:#fff; margin-bottom:4px;">Starting navigation...</div>
+            <div id="nav-distance" style="font-size:13px; color:rgba(255,255,255,0.8);"></div>
+          </div>
+        </div>
+        <button onclick="stopNavigation()" style="background:rgba(255,255,255,0.2); border:none; color:#fff; width:40px; height:40px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)';" onmouseout="this.style.background='rgba(255,255,255,0.2)';">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      
+      <div style="padding:20px; display:flex; gap:16px; align-items:center;">
+        <button onclick="previousStep()" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; padding:12px; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0;" onmouseover="this.style.background='rgba(255,255,255,0.15)';" onmouseout="this.style.background='rgba(255,255,255,0.1)';">
+          <span class="material-icons-round">arrow_back</span>
+        </button>
+        
+        <div style="flex:1; text-align:center;">
+          <div id="nav-step-counter" style="font-size:13px; color:rgba(255,255,255,0.6); margin-bottom:8px;"></div>
+          <div id="nav-maneuver" style="font-size:15px; color:rgba(255,255,255,0.9);"></div>
+        </div>
+        
+        <button onclick="nextStep()" style="background:rgba(255,107,53,0.8); border:none; color:#fff; padding:12px; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0;" onmouseover="this.style.background='rgba(255,107,53,1)';" onmouseout="this.style.background='rgba(255,107,53,0.8)';">
+          <span class="material-icons-round">arrow_forward</span>
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(navigationPanel);
+  }
+
+  function updateNavigationStep() {
+    if (!window.routeData || !navigationPanel) return;
+
+    const steps = window.routeData.steps;
+    const step = steps[currentStepIndex];
+
+    if (!step) return;
+
+    const instruction = step.maneuver.instruction || "Continue";
+    const distance = step.distance > 1000 
+      ? `${(step.distance / 1000).toFixed(1)} km`
+      : `${Math.round(step.distance)} m`;
+    
+    const maneuverType = step.maneuver.type;
+    const modifier = step.maneuver.modifier || '';
+
+    // Update icon based on maneuver
+    let icon = 'navigation';
+    if (maneuverType === 'turn') {
+      icon = modifier.includes('left') ? 'turn_left' : modifier.includes('right') ? 'turn_right' : 'straight';
+    } else if (maneuverType === 'arrive') {
+      icon = 'place';
+    } else if (maneuverType === 'depart') {
+      icon = 'trip_origin';
+    } else if (maneuverType.includes('roundabout')) {
+      icon = 'roundabout_left';
+    }
+
+    document.getElementById('nav-icon').textContent = icon;
+    document.getElementById('nav-instruction').textContent = instruction;
+    document.getElementById('nav-distance').textContent = `in ${distance}`;
+    document.getElementById('nav-step-counter').textContent = `Step ${currentStepIndex + 1} of ${steps.length}`;
+    document.getElementById('nav-maneuver').textContent = step.name || 'Unnamed road';
+
+    // Center map on current step
+    const coord = step.maneuver.location;
+    map.flyTo({
+      center: coord,
+      zoom: 16,
+      duration: 1000
+    });
+  }
+
+  window.nextStep = function() {
+    if (!window.routeData) return;
+    
+    if (currentStepIndex < window.routeData.steps.length - 1) {
+      currentStepIndex++;
+      updateNavigationStep();
+    } else {
+      // Navigation complete
+      showNavigationComplete();
+    }
+  };
+
+  window.previousStep = function() {
+    if (currentStepIndex > 0) {
+      currentStepIndex--;
+      updateNavigationStep();
+    }
+  };
+
+  window.stopNavigation = function() {
+    navigationActive = false;
+    if (navigationPanel) {
+      navigationPanel.remove();
+      navigationPanel = null;
+    }
+    
+    // Fit bounds back to full route
+    if (window.routeData) {
+      const coords = window.routeData.coords;
+      const bounds = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+      map.fitBounds(bounds, { padding: 80 });
+    }
+  };
+
+  function showNavigationComplete() {
+    if (navigationPanel) {
+      navigationPanel.innerHTML = `
+        <div style="background: linear-gradient(135deg, #0fa958, #0c8a47); padding:40px 20px; text-align:center;">
+          <span class="material-icons-round" style="font-size:64px; color:#fff; margin-bottom:16px; display:block;">check_circle</span>
+          <div style="font-size:24px; font-weight:700; color:#fff; margin-bottom:8px;">You've Arrived!</div>
+          <div style="font-size:14px; color:rgba(255,255,255,0.9); margin-bottom:24px;">Navigation complete</div>
+          <button onclick="stopNavigation()" style="background:#fff; color:#0fa958; border:none; padding:14px 32px; border-radius:12px; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.transform='scale(1.05)';" onmouseout="this.style.transform='scale(1)';">
+            Close Navigation
+          </button>
+        </div>
+      `;
+    }
+  }
 })();

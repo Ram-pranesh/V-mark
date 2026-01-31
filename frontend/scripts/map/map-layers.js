@@ -4,11 +4,10 @@
   if (!map) return;
 
   function onLoad() {
-    // Set globe projection
+    // Set mercator projection default
     try {
-      map.setProjection({ type: "globe" });
+      map.setProjection({ type: "mercator" });
     } catch (e) {
-      console.warn("Globe projection not supported, using mercator", e);
     }
 
     // --- 1. SATELLITE 2: Sentinel-2 Cloudless (EOX WMTS) ---

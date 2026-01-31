@@ -98,7 +98,28 @@
 </head>
 
 <body>
-    <div id="sidebar" class="open">
+    <!-- Drone Mode Loading Skeleton -->
+    <div id="drone-skeleton" class="skeleton-wrapper active" style="position: fixed; left: 0; top: 0; width: 340px; height: 100vh; background: rgba(10, 10, 10, 0.95); z-index: 1000; padding: 20px;">
+        <div class="skeleton skeleton-title" style="width: 70%; height: 32px; margin-bottom: 24px;"></div>
+        <div class="skeleton-layer-group">
+            <div class="skeleton skeleton-sidebar-item"></div>
+            <div class="skeleton skeleton-sidebar-item"></div>
+        </div>
+        <div class="skeleton-layer-group">
+            <div class="skeleton skeleton-sidebar-item"></div>
+        </div>
+    </div>
+
+    <div id="map-skeleton-drone" class="skeleton-wrapper active" style="position: fixed; top: 0; left: 340px; right: 0; bottom: 0; z-index: 999;">
+        <div class="skeleton" style="width: 100%; height: 100%;"></div>
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #fff;">
+            <div class="skeleton skeleton-circle" style="margin: 0 auto 16px;"></div>
+            <div style="font-size: 18px; font-weight: 500;">Initializing Drone View...</div>
+            <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Connecting to drone telemetry</div>
+        </div>
+    </div>
+
+    <div id="sidebar" class="open loading-hidden">
         <div class="sidebar-header">
             <h2>
                 <img src="../assets/img/drone-image.png"
@@ -192,11 +213,11 @@
         </div>
     </div>
 
-    <button id="sidebar-toggle" onclick="toggleSidebar()" class="open" aria-label="Close sidebar">
+    <button id="sidebar-toggle" onclick="toggleSidebar()" class="open loading-hidden" aria-label="Close sidebar">
         <span id="sidebar-toggle-icon" class="material-icons-round">menu_open</span>
     </button>
 
-    <div id="map" class="sidebar-open">
+    <div id="map" class="sidebar-open loading-hidden">
         <div class="drone-view-indicator">
             <span class="material-icons-round">videocam</span> LIVE DRONE FEED
         </div>
@@ -305,6 +326,34 @@
         // Init
         updateDrone('drone-1');
 
+    </script>
+    
+    <script>
+        // Hide skeleton loaders after map loads
+        window.addEventListener('load', () => {
+            const checkMap = setInterval(() => {
+                if (window.map && map.loaded()) {
+                    clearInterval(checkMap);
+                    setTimeout(() => {
+                        document.querySelectorAll('.skeleton-wrapper').forEach(el => {
+                            el.classList.remove('active');
+                            setTimeout(() => el.style.display = 'none', 300);
+                        });
+                        document.querySelectorAll('.loading-hidden').forEach(el => {
+                            el.classList.remove('loading-hidden');
+                            el.style.opacity = '0';
+                            el.style.transition = 'opacity 0.3s ease-in';
+                            setTimeout(() => el.style.opacity = '1', 50);
+                        });
+                    }, 500);
+                }
+            }, 100);
+            setTimeout(() => {
+                clearInterval(checkMap);
+                document.querySelectorAll('.skeleton-wrapper').forEach(el => { el.classList.remove('active'); el.style.display = 'none'; });
+                document.querySelectorAll('.loading-hidden').forEach(el => { el.classList.remove('loading-hidden'); el.style.opacity = '1'; });
+            }, 3000);
+        });
     </script>
 </body>
 

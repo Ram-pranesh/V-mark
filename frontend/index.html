@@ -16,7 +16,30 @@
 </head>
 
 <body>
-  <div id="sidebar" class="open">
+  <!-- Sidebar Loading Skeleton -->
+  <div id="sidebar-skeleton" class="skeleton-wrapper active" style="position: fixed; left: 0; top: 0; width: 340px; height: 100vh; background: rgba(10, 10, 10, 0.95); z-index: 1000; padding: 20px;">
+    <div class="skeleton skeleton-title" style="width: 80%; height: 32px; margin-bottom: 24px;"></div>
+    
+    <div class="skeleton-layer-group">
+      <div class="skeleton skeleton-layer-header"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+    </div>
+    
+    <div class="skeleton-layer-group">
+      <div class="skeleton skeleton-layer-header"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+    </div>
+    
+    <div class="skeleton-layer-group">
+      <div class="skeleton skeleton-layer-header"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+      <div class="skeleton skeleton-sidebar-item"></div>
+    </div>
+  </div>
+
+  <div id="sidebar" class="open loading-hidden">
     <div class="sidebar-header">
       <h2><span class="material-icons-round">local_fire_department</span> Command Center</h2>
     </div>
@@ -24,7 +47,7 @@
     <div class="sidebar-content">
       <div class="layer-group">
         <div class="group-title">
-          <span class="material-icons-round">satellite_alt</span> Satellite Feeds
+          <span class="material-icons-round">satellite</span> Satellite Feeds
         </div>
 
         <label class="layer-item">
@@ -94,11 +117,24 @@
           <span class="material-icons-round">settings_system_daydream</span> System
         </div>
 
-        <div class="layer-item" onclick="alert('Notification Alert System - No notifications')">
+        <div class="layer-item" onclick="openAlertCenter()">
           <span class="material-icons-round"
             style="margin-right:12px; font-size:20px; color:#ff6b35;">notifications_none</span>
           <span>Alert System</span>
         </div>
+
+        <div class="layer-item" onclick="toggleMonitoring()">
+          <span class="material-icons-round" id="monitor-icon"
+            style="margin-right:12px; font-size:20px; color:#aaa;">radar</span>
+          <span id="monitor-text">Start Monitoring</span>
+        </div>
+
+        <div class="layer-item" onclick="simulateAlert()">
+          <span class="material-icons-round" style="margin-right:12px; font-size:20px; color:#ffc107;">bug_report</span>
+          <span>Test Verification</span>
+        </div>
+
+
 
         <div class="layer-item" onclick="window.location.href='./drone-mode/index.html'">
           <span class="material-icons-round"
@@ -112,11 +148,21 @@
     </div>
   </div>
 
-  <button id="sidebar-toggle" onclick="toggleSidebar()" class="open" aria-label="Close sidebar">
+  <button id="sidebar-toggle" onclick="toggleSidebar()" class="open loading-hidden" aria-label="Close sidebar">
     <span id="sidebar-toggle-icon" class="material-icons-round">menu_open</span>
   </button>
 
-  <div id="map" class="sidebar-open"></div>
+  <!-- Map Loading Skeleton -->
+  <div id="map-skeleton" class="skeleton-wrapper active" style="position: fixed; top: 0; left: 340px; right: 0; bottom: 0; z-index: 999;">
+    <div class="skeleton skeleton-map" style="height: 100%;"></div>
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #fff;">
+      <div class="skeleton skeleton-circle" style="margin: 0 auto 16px;"></div>
+      <div style="font-size: 18px; font-weight: 500;">Loading Map...</div>
+      <div style="font-size: 14px; color: #aaa; margin-top: 8px;">Initializing satellite feeds</div>
+    </div>
+  </div>
+
+  <div id="map" class="sidebar-open loading-hidden"></div>
   <div id="temp-tooltip"
     style="position: absolute; display: none; background: rgba(10, 10, 10, 0.85); color: #fff; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px; pointer-events: none; z-index: 100; backdrop-filter: blur(6px); box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
   </div>
@@ -129,6 +175,162 @@
   <script src="./scripts/app-bootstrap.js"></script>
 
   <script>
+    // Hide skeletons and show content when everything is loaded
+    function hideLoadingSkeletons() {
+      // Hide all skeleton wrappers
+      document.querySelectorAll('.skeleton-wrapper').forEach(el => {
+        el.classList.remove('active');
+        setTimeout(() => el.style.display = 'none', 300);
+      });
+      
+      // Show all hidden content with fade-in
+      document.querySelectorAll('.loading-hidden').forEach(el => {
+        el.classList.remove('loading-hidden');
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.3s ease-in';
+        setTimeout(() => el.style.opacity = '1', 50);
+      });
+    }
+
+    // Call hide skeletons after map loads
+    window.addEventListener('load', () => {
+      // Wait for map to be fully initialized (check if map exists)
+      const checkMap = setInterval(() => {
+        if (window.map && map.loaded()) {
+          clearInterval(checkMap);
+          setTimeout(hideLoadingSkeletons, 500); // Small delay for smooth transition
+        }
+      }, 100);
+      
+      // Fallback: hide after 3 seconds even if map doesn't fully load
+      setTimeout(() => {
+        clearInterval(checkMap);
+        hideLoadingSkeletons();
+      }, 3000);
+    });
+
+    // Handle Auto-Routing from Alert Center
+    window.addEventListener('load', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const action = urlParams.get('action');
+
+      if (action === 'route') {
+        const destLat = parseFloat(urlParams.get('lat'));
+        const destLon = parseFloat(urlParams.get('lon'));
+
+        if (!isNaN(destLat) && !isNaN(destLon)) {
+          console.log("Auto-Routing requested to:", destLat, destLon);
+
+          // Get User Location
+          if (navigator.geolocation) {
+            const statusDiv = document.createElement('div');
+            Object.assign(statusDiv.style, {
+              position: 'fixed',
+              top: '80px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(15, 15, 15, 0.95)',
+              backdropFilter: 'blur(16px)',
+              color: '#fff',
+              padding: '16px 24px',
+              borderRadius: '12px',
+              zIndex: '10000',
+              fontSize: '14px',
+              fontWeight: '500',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            });
+            statusDiv.innerHTML = '<span class="material-icons-round" style="color: #4aa8ff;">my_location</span> Getting your location...';
+            document.body.appendChild(statusDiv);
+
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const userLat = pos.coords.latitude;
+                const userLon = pos.coords.longitude;
+                
+                statusDiv.innerHTML = '<span class="material-icons-round" style="color: #0fa958;">navigation</span> Calculating route...';
+
+                // Wait for map and calculateRoute to be ready
+                const waitForMap = setInterval(() => {
+                  if (window.calculateRoute && window.map && window.map.loaded()) {
+                    clearInterval(waitForMap);
+                    
+                    // Small delay to ensure map is fully ready
+                    setTimeout(() => {
+                      if (document.body.contains(statusDiv)) document.body.removeChild(statusDiv);
+                      
+                      // Calculate Route - format: [lon, lat]
+                      console.log("Starting route from user location:", [userLon, userLat], "to fire:", [destLon, destLat]);
+                      window.calculateRoute([userLon, userLat], [destLon, destLat]);
+                      
+                      // Show success message
+                      const successDiv = document.createElement('div');
+                      Object.assign(successDiv.style, {
+                        position: 'fixed',
+                        top: '80px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: 'rgba(15, 183, 88, 0.95)',
+                        backdropFilter: 'blur(16px)',
+                        color: '#fff',
+                        padding: '12px 20px',
+                        borderRadius: '12px',
+                        zIndex: '10000',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+                      });
+                      successDiv.innerHTML = '<span class="material-icons-round" style="font-size: 16px;">check_circle</span> Route calculated!';
+                      document.body.appendChild(successDiv);
+                      
+                      setTimeout(() => {
+                        if (document.body.contains(successDiv)) document.body.removeChild(successDiv);
+                      }, 3000);
+                    }, 500);
+                  }
+                }, 100);
+              },
+              (err) => {
+                console.error("Geolocation failed:", err);
+                statusDiv.innerHTML = '<span class="material-icons-round" style="color: #ff6b35;">location_off</span> Location access denied. Using demo location...';
+
+                // Fallback to demo location (India center)
+                const mockUserLon = 78.9629;
+                const mockUserLat = 20.5937;
+
+                setTimeout(() => {
+                  if (document.body.contains(statusDiv)) document.body.removeChild(statusDiv);
+
+                  const waitForMap = setInterval(() => {
+                    if (window.calculateRoute && window.map && window.map.loaded()) {
+                      clearInterval(waitForMap);
+                      console.log("Starting route from demo location:", [mockUserLon, mockUserLat], "to fire:", [destLon, destLat]);
+                      window.calculateRoute([mockUserLon, mockUserLat], [destLon, destLat]);
+                    }
+                  }, 100);
+                }, 2000);
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+              }
+            );
+          } else {
+            alert("Geolocation is not supported by this browser.");
+          }
+        }
+      }
+
+      // Clear params to avoid loop on refresh
+      if (action === 'route') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    });
+
     function toggleSidebar() {
       const sidebar = document.getElementById("sidebar");
       const mapEl = document.getElementById("map");
@@ -173,6 +375,16 @@
     function toggleSatellite(selected) {
       const arcgis = document.getElementById('sat-arcgis');
       const sentinel = document.getElementById('sat-sentinel');
+      const mapSkeleton = document.getElementById('map-skeleton');
+      const mapEl = document.getElementById('map');
+      
+      // Show skeleton
+      if (mapSkeleton) {
+        mapSkeleton.style.display = 'block';
+        mapSkeleton.classList.add('active');
+      }
+      if (mapEl) mapEl.classList.add('loading-hidden');
+      
       if (selected === 'arcgis') {
         if (arcgis.checked) {
           sentinel.checked = false;
@@ -211,6 +423,15 @@
       }
 
       syncFireVisibility();
+      
+      // Hide skeleton after loading
+      setTimeout(() => {
+        if (mapSkeleton) {
+          mapSkeleton.style.display = 'none';
+          mapSkeleton.classList.remove('active');
+        }
+        if (mapEl) mapEl.classList.remove('loading-hidden');
+      }, 800);
 
     }
 
@@ -219,6 +440,32 @@
       const domId = 'layer-' + mapLayerId.replace('-layer', '');
       const checkbox = document.getElementById(domId);
       if (!checkbox) return;
+
+      // Show skeleton loading for atmospheric layers
+      if (mapLayerId === 'wind-layer' || mapLayerId === 'temp-layer') {
+        const mapSkeleton = document.getElementById('map-skeleton');
+        const mapEl = document.getElementById('map');
+        
+        if (mapSkeleton) {
+          mapSkeleton.style.display = 'block';
+          mapSkeleton.classList.add('active');
+        }
+        if (mapEl) mapEl.classList.add('loading-hidden');
+        
+        // Hide skeleton after map is idle
+        const hideSkeletonOnIdle = () => {
+          setTimeout(() => {
+            if (mapSkeleton) {
+              mapSkeleton.style.display = 'none';
+              mapSkeleton.classList.remove('active');
+            }
+            if (mapEl) mapEl.classList.remove('loading-hidden');
+          }, 1000);
+          map.off('idle', hideSkeletonOnIdle);
+        };
+        
+        map.once('idle', hideSkeletonOnIdle);
+      }
 
       // Atmospheric layers should be mutually exclusive
       if (mapLayerId === 'wind-layer' || mapLayerId === 'temp-layer') {
@@ -348,7 +595,91 @@
         }, 100);
       });
 
-      map.on('mouseout', () => tooltip.style.display = 'none');
+      map.on('mouseout', () => {
+        const tooltip = document.getElementById('temp-tooltip');
+        if (tooltip) tooltip.style.display = 'none';
+      });
+    }
+
+
+    function openAlertCenter(data = null) {
+      if (data) {
+        sessionStorage.setItem('alertData', JSON.stringify(data));
+      } else {
+        sessionStorage.removeItem('alertData');
+      }
+      window.location.href = 'alert-center.html';
+    }
+
+    // Monitoring Logic
+    let monitoringInterval = null;
+    let isMonitoring = false;
+
+    function toggleMonitoring() {
+      const icon = document.getElementById('monitor-icon');
+      const text = document.getElementById('monitor-text');
+
+      if (isMonitoring) {
+        // Stop
+        clearInterval(monitoringInterval);
+        isMonitoring = false;
+        icon.style.color = '#aaa';
+        text.textContent = 'Start Monitoring';
+        text.style.color = '#aaa';
+        alert("Monitoring Stopped");
+      } else {
+        // Start
+        isMonitoring = true;
+        icon.style.color = '#28a745';
+        text.textContent = 'Monitoring Active...';
+        text.style.color = '#28a745';
+
+        // Trigger check every 10 seconds (or immediately)
+        checkFireStatus();
+        monitoringInterval = setInterval(checkFireStatus, 15000); // Check every 15s
+      }
+    }
+
+    async function checkFireStatus(simulate = false) {
+      if (!window.map) return;
+      const center = map.getCenter();
+
+      console.log(`Running verification (Simulate: ${simulate})...`);
+      try {
+        const body = { lat: center.lat, lon: center.lng };
+        if (simulate) body.simulate = true;
+
+        const response = await fetch('/api/verify-fire', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log("Verification Result:", result);
+
+          if (result.alert_generated) {
+            // STOP monitoring if active
+            if (isMonitoring) toggleMonitoring();
+
+            // Small delay to let user see change or just redirect
+            const msg = simulate ? "SIMULATION: Fire Detected!" : "CRITICAL: Fire Detected!";
+            alert(`${msg}\nRedirecting to Alert Centre...`);
+            openAlertCenter(result);
+          } else if (simulate) {
+            alert("Simulation Result: No Fire Detected.");
+          }
+        }
+      } catch (e) {
+        console.error("Monitoring error", e);
+      }
+    }
+
+    function simulateAlert() {
+      if (confirm("Run a simulated verification test? This will trigger a positive fire result without using the webcam.")) {
+        checkFireStatus(true);
+      }
     }
 
   </script>

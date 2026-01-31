@@ -90,7 +90,7 @@ const map = new maplibregl.Map({
       }
     ],
     projection: {
-      type: "globe"
+      type: "mercator"
     }
   }
 });

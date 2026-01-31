@@ -6,9 +6,9 @@
 
   map.on("mousemove", (e) => {
     if (coordsDiv) {
-      const lng = e.lngLat.lng.toFixed(6);
-      const lat = e.lngLat.lat.toFixed(6);
-      coordsDiv.textContent = `Lat: ${lat} | Lng: ${lng}`;
+      const lng = e.lngLat.lng.toFixed(1);
+      const lat = e.lngLat.lat.toFixed(1);
+      coordsDiv.textContent = `Lat:${lat} Lng:${lng}`;
     }
 
     const mapSelect = window.mapSelect || (typeof mapSelect !== "undefined" ? mapSelect : null);
