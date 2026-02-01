@@ -18,6 +18,18 @@
       .setHTML('<div style="color:#333; padding:5px;">Scanning atmosphere...</div>')
       .addTo(map);
 
+    // Restore view when popup is closed (canceled)
+    popup.on('close', () => {
+      if (window._weatherPopupPrevCenter) {
+        map.easeTo({
+          center: window._weatherPopupPrevCenter,
+          padding: { top: 0, bottom: 0 },
+          duration: 600
+        });
+        window._weatherPopupPrevCenter = null;
+      }
+    });
+
     try {
       // 1. Fetch Weather
       const weatherRes = await fetch(
@@ -77,6 +89,11 @@
             </div>
             
             ${components.co > 1000 ? '<div style="margin-top:8px; color:#c0392b; font-weight:600; font-size:11px;">High CO detected (possible fire)</div>' : ''}
+            
+            <button id="btn-weather-details" style="width:100%; margin-top:8px; padding:5px; background:#667eea; color:white; border:none; border-radius:4px; cursor:pointer; font-size:11px;" onclick="window.fetchDetailedWeather(${lat}, ${lng})">
+              More Info
+            </button>
+            <div id="weather-details-container" style="display:none; margin-top:5px; border-top:1px solid #eee;"></div>
           </div>
         </div>
       `;
@@ -87,4 +104,122 @@
       popup.setHTML('<div style="color:red; padding:10px;">Unable to retrieve telemetry.</div>');
     }
   });
+
+  // Global handler for detailed weather
+  window.fetchDetailedWeather = async (lat, lng) => {
+    const container = document.getElementById('weather-details-container');
+    const btn = document.getElementById('btn-weather-details');
+    if (!container || !btn) return;
+
+    // Toggle
+    if (container.style.display === 'block') {
+      container.style.display = 'none';
+      btn.innerText = 'More Info';
+
+      // Restore view on collapse
+      if (window._weatherPopupPrevCenter) {
+        window.map.easeTo({
+          center: window._weatherPopupPrevCenter,
+          padding: { top: 0, bottom: 0 },
+          duration: 600
+        });
+        window._weatherPopupPrevCenter = null;
+      }
+      return;
+    }
+
+    // Auto-pan to make room for the popup
+    if (window.map) {
+      // Store current center before panning
+      window._weatherPopupPrevCenter = window.map.getCenter();
+
+      window.map.easeTo({
+        center: [lng, lat],
+        padding: { top: 20, bottom: 300 }, // Push map up (point moves up) to reveal popup
+        duration: 600
+      });
+    }
+
+    const originalText = btn.innerText;
+    btn.innerText = 'Loading...';
+
+    try {
+      const res = await fetch(`/api/detailed-weather?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      // Horizontal Scroll Container
+      let html = '<div id="weather-scroll-view" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-top:8px; scrollbar-width:thin;">';
+
+      const now = new Date();
+
+      // Show ALL data (Past 5 days + Forecast)
+      data.forEach(row => {
+        const date = new Date(row.date);
+        const hours = date.getHours();
+        const timeStr = hours.toString().padStart(2, '0') + ':00';
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        // Highlight Current Hour (within 1 hour window)
+        const diff = Math.abs(date - now);
+        const isCurrent = diff < 3600000 / 2; // within 30 min
+
+        const border = isCurrent ? '2px solid #667eea' : '1px solid #eee';
+        const bg = isCurrent ? '#f8faff' : '#fff';
+        const fw = isCurrent ? '700' : '400';
+        const shadow = isCurrent ? '0 2px 5px rgba(102,126,234,0.3)' : 'none';
+        const cardId = isCurrent ? 'current-weather-card' : '';
+
+        html += `
+          <div id="${cardId}" style="flex:0 0 90px; display:flex; flex-direction:column; align-items:center; justify-content:start; text-align:center; padding:8px 4px; border:${border}; background:${bg}; border-radius:8px; font-size:10px; box-shadow:${shadow}; min-height:145px;">
+             <div style="font-size:9px; color:#888; margin-bottom:2px; text-transform:uppercase; letter-spacing:0.5px;">${dateStr}</div>
+             <div style="font-weight:600; margin-bottom:4px; color:#555; font-size:11px;">${timeStr}</div>
+             <div style="font-size:14px; font-weight:${fw}; color:#333; margin-bottom:2px;">${row.temperature_2m?.toFixed(0)}°</div>
+             <div style="font-size:9px; color:#666;">${row.wind_speed_10m?.toFixed(0)} <span style="font-size:8px">m/s</span></div>
+             
+             <div style="width:100%; height:1px; background:#eee; margin:5px 0;"></div>
+             
+             <div style="display:grid; grid-template-columns:1fr 1fr; gap:3px; width:100%; text-align:left; padding-left:4px; font-size:9px; color:#444;">
+                 <span style="color:#888;">PM<sub>2.5</sub></span> <b>${row.pm2_5?.toFixed(0) || '-'}</b>
+                 <span style="color:#888;">CO<sub>2</sub></span> <b>${row.carbon_dioxide?.toFixed(0) || '-'}</b>
+                 <span style="color:#888;">AOD</span> <b>${row.aerosol_optical_depth?.toFixed(2) || '-'}</b>
+                 <span style="color:#888;">NO<sub>2</sub></span> <b>${row.nitrogen_dioxide?.toFixed(0) || '-'}</b>
+             </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+
+      // Add Soil/Humidity summary on top?
+      // User asked for "all these details". The table shows only 3.
+      // I'll add summaries below.
+      const current = data[0];
+      if (current) {
+        html += `<div style="margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px; background:#f0f0ff; padding:5px; border-radius:4px;">
+                <div>Humidity: <b>${current.relative_humidity_2m?.toFixed(0)}%</b></div>
+                <div>Gusts: <b>${current.wind_gusts_10m?.toFixed(1)} m/s</b></div>
+                <div>Soil M: <b>${current.soil_moisture_0_to_1cm?.toFixed(2)}</b></div>
+                <div>CAPE: <b>${current.cape?.toFixed(0)}</b></div>
+             </div>`;
+      }
+
+      container.innerHTML = html;
+      container.style.display = 'block';
+      btn.innerText = 'Hide Info';
+
+      // Auto-scroll to center the current time
+      const currentCard = document.getElementById('current-weather-card');
+      if (currentCard) {
+        setTimeout(() => {
+          currentCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }, 100);
+      }
+
+    } catch (err) {
+      console.error(err);
+      btn.innerText = 'Error Fetching Data';
+    }
+  };
+
 })();

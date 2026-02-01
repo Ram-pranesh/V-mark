@@ -3,7 +3,12 @@ from flask import Flask, jsonify, send_from_directory, request
 import requests
 from dotenv import load_dotenv
 from fire_processor import process_fire_data, csv_to_fire_data
+from fire_processor import process_fire_data, csv_to_fire_data
 from india_hotspot_filter import filter_hotspots_for_india, is_point_in_india
+import openmeteo_requests
+import requests_cache
+import pandas as pd
+from retry_requests import retry
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
@@ -62,6 +67,105 @@ def config():
             "SENTINEL_WMS_URL": get_env("SENTINEL_WMS_URL", "https://tiles.maps.eox.at/wms"),
         }
     )
+
+
+
+# Setup Open-Meteo API client with cache and retry on error
+cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
+retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+openmeteo = openmeteo_requests.Client(session=retry_session)
+
+@app.get("/api/detailed-weather")
+def detailed_weather():
+    lat = request.args.get("lat")
+    lng = request.args.get("lng")
+    if not lat or not lng:
+        return jsonify({"error": "Missing lat/lng"}), 400
+
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": float(lat),
+        "longitude": float(lng),
+        "hourly": ["temperature_2m", "relative_humidity_2m", "precipitation", "wind_speed_10m",
+                   "wind_direction_10m", "wind_gusts_10m", "vapour_pressure_deficit",
+                   "soil_moisture_0_to_1cm", "soil_moisture_9_to_27cm", "cape"],
+        "past_days": 5,
+        "forecast_days": 1 
+    }
+    
+    try:
+        # Fetch Weather
+        weather_responses = openmeteo.weather_api(url, params=params)
+        weather_res = weather_responses[0]
+        
+        # Fetch Air Quality
+        air_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        air_params = {
+            "latitude": float(lat),
+            "longitude": float(lng),
+            "hourly": ["pm2_5", "aerosol_optical_depth", "carbon_monoxide", "nitrogen_dioxide", "carbon_dioxide"],
+            "domains": "cams_global",
+            "past_days": 5,
+            "forecast_days": 1
+        }
+        air_responses = openmeteo.weather_api(air_url, params=air_params)
+        air_res = air_responses[0]
+        
+        # Process Weather Data
+        hourly = weather_res.Hourly()
+        weather_data = {"date": pd.date_range(
+            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+            end =  pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = hourly.Interval()),
+            inclusive = "left"
+        )}
+        
+        weather_data["temperature_2m"] = hourly.Variables(0).ValuesAsNumpy()
+        weather_data["relative_humidity_2m"] = hourly.Variables(1).ValuesAsNumpy()
+        weather_data["precipitation"] = hourly.Variables(2).ValuesAsNumpy()
+        weather_data["wind_speed_10m"] = hourly.Variables(3).ValuesAsNumpy()
+        weather_data["wind_direction_10m"] = hourly.Variables(4).ValuesAsNumpy()
+        weather_data["wind_gusts_10m"] = hourly.Variables(5).ValuesAsNumpy()
+        weather_data["vapour_pressure_deficit"] = hourly.Variables(6).ValuesAsNumpy()
+        weather_data["soil_moisture_0_to_1cm"] = hourly.Variables(7).ValuesAsNumpy()
+        weather_data["soil_moisture_9_to_27cm"] = hourly.Variables(8).ValuesAsNumpy()
+        weather_data["cape"] = hourly.Variables(9).ValuesAsNumpy()
+        
+        df_weather = pd.DataFrame(data=weather_data)
+        
+        # Process Air Data
+        hourly_air = air_res.Hourly()
+        air_data = {"date": pd.date_range(
+            start = pd.to_datetime(hourly_air.Time(), unit = "s", utc = True),
+            end = pd.to_datetime(hourly_air.TimeEnd(), unit = "s", utc = True),
+            freq = pd.Timedelta(seconds = hourly_air.Interval()),
+            inclusive = "left"
+        )}
+        air_data["pm2_5"] = hourly_air.Variables(0).ValuesAsNumpy()
+        air_data["aerosol_optical_depth"] = hourly_air.Variables(1).ValuesAsNumpy()
+        air_data["carbon_monoxide"] = hourly_air.Variables(2).ValuesAsNumpy()
+        air_data["nitrogen_dioxide"] = hourly_air.Variables(3).ValuesAsNumpy()
+        air_data["carbon_dioxide"] = hourly_air.Variables(4).ValuesAsNumpy()
+        
+        df_air = pd.DataFrame(data=air_data)
+        
+        # Merge Dataframes on date
+        # Note: timestamps must align. Open-Meteo usually aligns them if parameters match.
+        df_merged = pd.merge(df_weather, df_air, on="date", how="inner")
+        
+        df = df_merged
+        
+        # Convert date to string for JSON
+        df['date'] = df['date'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Replace NaN with None
+        df = df.where(pd.notnull(df), None)
+        
+        return jsonify(df.to_dict(orient="records"))
+        
+    except Exception as e:
+        print(f"OpenMeteo Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.get("/firms/area")
