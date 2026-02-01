@@ -149,6 +149,9 @@
 
       if (data.error) throw new Error(data.error);
 
+      // Store for stats view
+      window._currentWeatherData = data;
+
       // Horizontal Scroll Container
       let html = '<div id="weather-scroll-view" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-top:8px; scrollbar-width:thin;">';
 
@@ -204,6 +207,13 @@
              </div>`;
       }
 
+      // Add Stats Button
+      html += `
+        <button style="width:100%; margin-top:8px; padding:8px; background:#e0f2f1; color:#00695c; border:1px solid #b2dfdb; border-radius:6px; font-weight:600; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; gap:5px;" onclick="window.showWeatherStats()">
+            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor"><path d="m105-399-65-47 200-320 120 140 160-260 120 180 135-214 65 47-198 314-119-179-152 247-121-141-145 233Zm475 159q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29ZM784-80 676-188q-21 14-45.5 21t-50.5 7q-75 0-127.5-52.5T400-340q0-75 52.5-127.5T580-520q75 0 127.5 52.5T760-340q0 26-7 50.5T732-244l108 108-56 56Z"/></svg> View Stats
+        </button>
+        `;
+
       container.innerHTML = html;
       container.style.display = 'block';
       btn.innerText = 'Hide Info';
@@ -220,6 +230,308 @@
       console.error(err);
       btn.innerText = 'Error Fetching Data';
     }
+  };
+
+  // Stats Renderer
+  window.showWeatherStats = () => {
+    const rawData = window._currentWeatherData;
+    if (!rawData) return;
+
+    // Group Data by Date
+    const grouped = {};
+    const allDates = [];
+    rawData.forEach(row => {
+      const d = row.date.split(' ')[0]; // YYYY-MM-DD
+      if (!grouped[d]) {
+        grouped[d] = [];
+        allDates.push(d);
+      }
+      grouped[d].push(row);
+    });
+    // Sort dates
+    allDates.sort(); // Oldest first. Last is "Present/Future"
+
+    // Initial State
+    const state = {
+      metric: 'temp_wind',
+      view: 'daily',
+      dateIndex: allDates.length - 1, // Default to latest
+      showExport: false
+    };
+
+    // Render Modal Frame
+    let modal = document.getElementById('weather-stats-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'weather-stats-modal';
+      modal.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:850px; background:rgba(255,255,255,0.99); backdrop-filter:blur(10px); padding:20px; border-radius:12px; box-shadow:0 10px 50px rgba(0,0,0,0.4); z-index:9999; display:block; border:1px solid #ddd; font-family:var(--font-primary, sans-serif);';
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'block';
+
+    const renderUI = () => {
+      if (state.showExport) {
+        renderExportUI();
+        return;
+      }
+
+      const currentDate = allDates[state.dateIndex];
+      const isOverall = state.view === 'overall';
+      // Date formatting: "Fri, Feb 02"
+      const dateDisplay = new Date(currentDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+      modal.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                     <h3 style="margin:0; font-size:18px; color:#333;">Weather Stats</h3>
+                     
+                     <select id="stats-metric-select" style="padding:4px 8px; border-radius:4px; border:1px solid #ccc; font-size:13px; cursor:pointer; background:#fff;">
+                        <option value="temp_wind" ${state.metric === 'temp_wind' ? 'selected' : ''}>Temp & Wind</option>
+                        <option value="pm25" ${state.metric === 'pm25' ? 'selected' : ''}>PM2.5</option>
+                        <option value="co2" ${state.metric === 'co2' ? 'selected' : ''}>CO2</option>
+                        <option value="aod" ${state.metric === 'aod' ? 'selected' : ''}>AOD</option>
+                        <option value="no2" ${state.metric === 'no2' ? 'selected' : ''}>NO2</option>
+                        <option value="humidity" ${state.metric === 'humidity' ? 'selected' : ''}>Humidity</option>
+                        <option value="soil" ${state.metric === 'soil' ? 'selected' : ''}>Soil Moisture</option>
+                     </select>
+                </div>
+                
+                <div style="display:flex; align-items:center; gap:10px; background:#f0f2f5; padding:4px 8px; border-radius:20px;">
+                    ${!isOverall ? `
+                        <button id="stats-prev-date" ${state.dateIndex <= 0 ? 'disabled style="opacity:0.3"' : ''} style="border:none; background:none; cursor:pointer; font-size:14px;">&#9664;</button>
+                        <span style="font-size:13px; font-weight:700; color:#000; width:100px; text-align:center;">${dateDisplay}</span>
+                        <button id="stats-next-date" ${state.dateIndex >= allDates.length - 1 ? 'disabled style="opacity:0.3"' : ''} style="border:none; background:none; cursor:pointer; font-size:14px;">&#9654;</button>
+                    ` : `<span style="font-size:13px; font-weight:700; color:#000; padding:0 10px;">Past 5 Days Overview</span>`}
+                    
+                    <button id="stats-toggle-view" style="font-size:11px; padding:3px 8px; border:1px solid #ccc; background:#fff; border-radius:4px; cursor:pointer; font-weight:600;">
+                        ${isOverall ? 'Switch to Daily' : 'Switch to Overall'}
+                    </button>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button id="stats-export-btn" style="background:#10b981; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer; box-shadow:0 2px 5px rgba(16,185,129,0.3);">Export Data</button>
+                    <button onclick="document.getElementById('weather-stats-modal').style.display='none'" style="border:none; background:none; font-size:24px; cursor:pointer; color:#888;">&times;</button>
+                </div>
+            </div>
+            
+            <div style="height:350px; position:relative; width:100%;">
+                <canvas id="weather-stats-chart"></canvas>
+            </div>
+        `;
+
+      setEventListeners();
+      updateChart();
+    };
+
+    const renderExportUI = () => {
+      modal.innerHTML = `
+            <div style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:18px; color:#333;">Export Data</h3>
+                <button id="export-cancel-btn" style="border:none; background:none; font-size:24px; cursor:pointer; color:#888;">&times;</button>
+            </div>
+            
+            <div style="font-size:13px; color:#444; display:grid; gap:20px;">
+                <!-- Section 1: Data Fields -->
+                <div>
+                    <div style="font-weight:700; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
+                        1. Select Data Fields
+                        <label style="font-weight:400; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer; background:#f0f0f0; padding:2px 6px; border-radius:4px;">
+                            <input type="checkbox" id="exp-field-all" checked> Previous All
+                        </label>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:8px;" id="exp-fields-container">
+                        ${['Temperature', 'Wind Speed', 'PM2.5', 'CO2', 'AOD', 'NO2', 'Humidity', 'Soil Moisture'].map(f =>
+        `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-field" value="${f}" checked> ${f}</label>`
+      ).join('')}
+                    </div>
+                </div>
+
+                <!-- Section 2: Date Range -->
+                <div>
+                    <div style="font-weight:700; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
+                        2. Select Dates
+                        <label style="font-weight:400; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer; background:#f0f0f0; padding:2px 6px; border-radius:4px;">
+                            <input type="checkbox" id="exp-date-all" checked> All 5 Days
+                        </label>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px;" id="exp-dates-container">
+                        ${allDates.map((d, i) => {
+        const label = i === allDates.length - 1 ? 'Today/Forecast' : (i === allDates.length - 2 ? 'Yesterday' : d);
+        return `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-date" value="${d}" checked> ${label}</label>`;
+      }).reverse().join('')}
+                    </div>
+                </div>
+
+                <!-- Section 3: Format -->
+                <div>
+                    <div style="font-weight:700; margin-bottom:8px;">3. Select Format</div>
+                    <div style="display:flex; gap:20px;">
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="exp-format" value="excel" checked> Excel (.xlsx)</label>
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="exp-format" value="csv"> CSV</label>
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="exp-format" value="json"> JSON</label>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:25px; display:flex; justify-content:flex-end; gap:10px;">
+                <button id="export-back-btn" style="padding:8px 16px; border:1px solid #ddd; background:#fff; border-radius:4px; cursor:pointer;">Cancel</button>
+                <button id="export-confirm-btn" style="padding:8px 24px; background:#10b981; color:#white; border:none; border-radius:4px; font-weight:700; cursor:pointer; color:#fff;">Download</button>
+            </div>
+        `;
+
+      // Export Logic Listeners
+      document.getElementById('export-cancel-btn').onclick = () => { state.showExport = false; renderUI(); };
+      document.getElementById('export-back-btn').onclick = () => { state.showExport = false; renderUI(); };
+
+      // "All" Toggles
+      document.getElementById('exp-field-all').onchange = (e) => {
+        document.querySelectorAll('.exp-field').forEach(cb => cb.checked = e.target.checked);
+      };
+      document.getElementById('exp-date-all').onchange = (e) => {
+        document.querySelectorAll('.exp-date').forEach(cb => cb.checked = e.target.checked);
+      };
+
+      document.getElementById('export-confirm-btn').onclick = () => {
+        // Gather Fields
+        const selectedFields = Array.from(document.querySelectorAll('.exp-field:checked')).map(cb => cb.value);
+        const fieldMap = {
+          'Temperature': 'temperature_2m', 'Wind Speed': 'wind_speed_10m', 'PM2.5': 'pm2_5',
+          'CO2': 'carbon_dioxide', 'AOD': 'aerosol_optical_depth', 'NO2': 'nitrogen_dioxide',
+          'Humidity': 'relative_humidity_2m', 'Soil Moisture': 'soil_moisture_0_to_1cm'
+        };
+        const keepKeys = ['date', ...selectedFields.map(f => fieldMap[f])];
+
+        // Gather Dates
+        const selectedDates = Array.from(document.querySelectorAll('.exp-date:checked')).map(cb => cb.value);
+
+        // Filter Data
+        let finalData = rawData.filter(r => selectedDates.includes(r.date.split(' ')[0]));
+
+        // Filter Columns
+        finalData = finalData.map(row => {
+          const newRow = {};
+          keepKeys.forEach(k => { if (row[k] !== undefined) newRow[k] = row[k]; });
+          return newRow;
+        });
+
+        const format = document.querySelector('input[name="exp-format"]:checked').value;
+
+        if (format === 'excel') {
+          if (typeof XLSX === 'undefined') { alert('Excel lib loading...'); return; }
+          const ws = XLSX.utils.json_to_sheet(finalData);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Export");
+          XLSX.writeFile(wb, "weather_export.xlsx");
+        } else if (format === 'csv') {
+          const headers = Object.keys(finalData[0]).join(',');
+          const rows = finalData.map(row => Object.values(row).join(',')).join('\n');
+          const blob = new Blob([headers + '\n' + rows], { type: 'text/csv' });
+          downloadBlob(blob, 'weather_export.csv');
+        } else {
+          const blob = new Blob([JSON.stringify(finalData, null, 2)], { type: 'application/json' });
+          downloadBlob(blob, 'weather_export.json');
+        }
+
+        state.showExport = false;
+        renderUI();
+      };
+    };
+
+    const setEventListeners = () => {
+      document.getElementById('stats-metric-select').onchange = (e) => { state.metric = e.target.value; updateChart(); };
+      document.getElementById('stats-toggle-view').onclick = () => { state.view = state.view === 'overall' ? 'daily' : 'overall'; renderUI(); };
+      document.getElementById('stats-export-btn').onclick = () => { state.showExport = true; renderUI(); };
+
+      const prevBtn = document.getElementById('stats-prev-date');
+      if (prevBtn) prevBtn.onclick = () => { if (state.dateIndex > 0) { state.dateIndex--; renderUI(); } };
+
+      const nextBtn = document.getElementById('stats-next-date');
+      if (nextBtn) nextBtn.onclick = () => { if (state.dateIndex < allDates.length - 1) { state.dateIndex++; renderUI(); } };
+    };
+
+    const updateChart = () => {
+      let chartData = state.view === 'overall' ? rawData : grouped[allDates[state.dateIndex]];
+      const ctx = document.getElementById('weather-stats-chart').getContext('2d');
+      if (window._weatherChart) window._weatherChart.destroy();
+
+      let datasets = [];
+      let yTitle = '', y1Title = '';
+
+      switch (state.metric) {
+        case 'temp_wind':
+          datasets.push({ label: 'Temperature', data: chartData.map(r => r.temperature_2m), borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', fill: true, yAxisID: 'y' });
+          datasets.push({ label: 'Wind Speed', data: chartData.map(r => r.wind_speed_10m), borderColor: '#3b82f6', borderDash: [5, 5], yAxisID: 'y1' });
+          yTitle = 'Temperature (°C)';
+          y1Title = 'Wind Speed (m/s)';
+          break;
+        case 'pm25':
+          datasets.push({ label: 'PM2.5', data: chartData.map(r => r.pm2_5), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, yAxisID: 'y' });
+          yTitle = 'Concentration (μg/m³)';
+          break;
+        case 'co2':
+          datasets.push({ label: 'CO2', data: chartData.map(r => r.carbon_dioxide), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, yAxisID: 'y' });
+          yTitle = 'Concentration (ppm)';
+          break;
+        case 'aod':
+          datasets.push({ label: 'AOD', data: chartData.map(r => r.aerosol_optical_depth), borderColor: '#ef4444', yAxisID: 'y' });
+          yTitle = 'Optical Depth';
+          break;
+        case 'no2':
+          datasets.push({ label: 'NO2', data: chartData.map(r => r.nitrogen_dioxide), borderColor: '#eab308', yAxisID: 'y' });
+          yTitle = 'Concentration (μg/m³)';
+          break;
+        case 'humidity':
+          datasets.push({ label: 'Humidity', data: chartData.map(r => r.relative_humidity_2m), borderColor: '#0ea5e9', fill: true, backgroundColor: 'rgba(14,165,233,0.2)', yAxisID: 'y' });
+          yTitle = 'Percentage (%)';
+          break;
+        case 'soil':
+          datasets.push({ label: 'Soil Moisture', data: chartData.map(r => r.soil_moisture_0_to_1cm), borderColor: '#78350f', yAxisID: 'y' });
+          yTitle = 'Volumetric Fraction';
+          break;
+      }
+
+      const labels = chartData.map(r => {
+        const d = new Date(r.date);
+        return state.view === 'overall' ? `${d.getDate()}/${d.getMonth() + 1} ${d.getHours()}:00` : `${d.getHours()}:00`;
+      });
+
+      window._weatherChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            x: {
+              display: true,
+              title: { display: true, text: 'Time', color: '#666', font: { size: 12, weight: 'bold' } }
+            },
+            y: {
+              type: 'linear', display: true, position: 'left',
+              title: { display: true, text: yTitle, color: '#444', font: { size: 12, weight: 'bold' } }
+            },
+            y1: {
+              type: 'linear', display: state.metric === 'temp_wind', position: 'right', grid: { drawOnChartArea: false },
+              title: { display: state.metric === 'temp_wind', text: y1Title, color: '#444', font: { size: 12, weight: 'bold' } }
+            }
+          }
+        }
+      });
+    };
+
+    const downloadBlob = (blob, filename) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      a.click();
+    };
+
+    renderUI();
   };
 
 })();
