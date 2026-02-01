@@ -31,42 +31,59 @@
     });
 
     try {
-      // 1. Fetch Weather
-      const weatherRes = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${CONFIG.OPENWEATHER_KEY}`
-      );
+      // 1. Fetch OpenWeather for Location Name & AQI (User Preference)
+      const [weatherRes, airRes, meteoRes] = await Promise.all([
+        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${CONFIG.OPENWEATHER_KEY}`),
+        fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lng}&appid=${CONFIG.OPENWEATHER_KEY}`),
+        fetch(`/api/detailed-weather?lat=${lat}&lng=${lng}`)
+      ]);
+
       const weatherData = await weatherRes.json();
-
-      // 2. Fetch Air Pollution (Gas Data)
-      const airRes = await fetch(
-        `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lng}&appid=${CONFIG.OPENWEATHER_KEY}`
-      );
       const airData = await airRes.json();
+      const meteoData = await meteoRes.json();
 
-      if (weatherData.cod !== 200) { throw new Error(weatherData.message); }
+      if (meteoData.error) throw new Error(meteoData.error);
 
-      // Parse Data
-      const components = airData.list[0].components; // co, no2, o3, so2, pm2_5, pm10, nh3
-      const aqi = airData.list[0].main.aqi; // 1 = Good, 5 = Very Poor
+      // Store Open-Meteo data for stats
+      window._currentWeatherData = meteoData;
 
-      // Color code AQI
+      // Parse OpenWeather info
+      const locationName = weatherData.name || "Target Zone";
+      const aqi = airData.list?.[0]?.main?.aqi || 1;
       const aqiColors = { 1: '#00e400', 2: '#ffff00', 3: '#ff7e00', 4: '#ff0000', 5: '#7e0023' };
       const aqiColor = aqiColors[aqi] || '#ccc';
+
+      // Parse Open-Meteo Current Data
+      const now = new Date();
+      const current = meteoData.reduce((prev, curr) => {
+        return (Math.abs(new Date(curr.date) - now) < Math.abs(new Date(prev.date) - now) ? curr : prev);
+      });
+
+      // WMO Label
+      const getWeatherLabel = (code) => {
+        if (code === 0) return 'Clear sky';
+        if (code < 4) return 'Partly cloudy';
+        if (code < 50) return 'Foggy';
+        if (code < 60) return 'Drizzle';
+        if (code < 80) return 'Rain';
+        return 'Stormy';
+      };
+      const wmoLabel = getWeatherLabel(current.weather_code);
 
       const htmlContent = `
         <div style="font-family: 'Segoe UI', sans-serif; min-width: 200px; color: #333;">
           <div style="background: #222; color: #fff; padding: 8px; border-radius: 4px 4px 0 0; display:flex; justify-content:space-between; align-items:center;">
-             <span style="font-weight:600;">${weatherData.name || "Target Zone"}</span>
+             <span style="font-weight:600;">${locationName}</span>
              <span style="background:${aqiColor}; color:#000; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">AQI ${aqi}</span>
           </div>
           
           <div style="padding: 10px;">
             <div style="display:flex; align-items:center; margin-bottom:8px;">
-                <span style="font-size:24px; font-weight:bold; margin-right:10px;">${Math.round(weatherData.main.temp)}°C</span>
+                <span style="font-size:24px; font-weight:bold; margin-right:10px;">${Math.round(current.temperature_2m)}°C</span>
                 <div style="font-size:12px; line-height:1.2;">
-                  <div>Wind: <b>${weatherData.wind.speed} m/s</b></div>
-                  <div>Direction: <b>${weatherData.wind.deg}°</b></div>
-                  <div>${weatherData.weather[0].description}</div>
+                  <div>Wind: <b>${current.wind_speed_10m.toFixed(1)} m/s</b></div>
+                  <div>Direction: <b>${current.wind_direction_10m.toFixed(2)}°</b></div>
+                  <div>${wmoLabel}</div>
                 </div>
             </div>
 
@@ -75,20 +92,20 @@
             <div style="font-size:11px; font-weight:600; color:#555; margin-bottom:4px;">ATMOSPHERIC COMPOSITION (μg/m³)</div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;">
                <div style="background:#f5f5f5; padding:4px; border-radius:4px;">
-                 <span style="color:#666;">CO</span> <b style="float:right;">${components.co}</b>
+                 <span style="color:#666;">CO</span> <b style="float:right;">${current.carbon_monoxide.toFixed(1)}</b>
                </div>
                <div style="background:#f5f5f5; padding:4px; border-radius:4px;">
-                 <span style="color:#666;">NO₂</span> <b style="float:right;">${components.no2}</b>
+                 <span style="color:#666;">NO₂</span> <b style="float:right;">${current.nitrogen_dioxide.toFixed(1)}</b>
                </div>
                <div style="background:#f5f5f5; padding:4px; border-radius:4px;">
-                 <span style="color:#666;">SO₂</span> <b style="float:right;">${components.so2}</b>
+                 <span style="color:#666;">CO₂</span> <b style="float:right;">${current.carbon_dioxide.toFixed(0)} <span style="font-size:10px; color:#888;">ppm</span></b>
                </div>
                <div style="background:#f5f5f5; padding:4px; border-radius:4px;">
-                 <span style="color:#666;">PM2.5</span> <b style="float:right;">${components.pm2_5}</b>
+                 <span style="color:#666;">PM2.5</span> <b style="float:right;">${current.pm2_5.toFixed(1)}</b>
                </div>
             </div>
             
-            ${components.co > 1000 ? '<div style="margin-top:8px; color:#c0392b; font-weight:600; font-size:11px;">High CO detected (possible fire)</div>' : ''}
+            ${current.carbon_monoxide > 1000 ? '<div style="margin-top:8px; color:#c0392b; font-weight:600; font-size:11px;">High CO detected (possible fire)</div>' : ''}
             
             <button id="btn-weather-details" style="width:100%; margin-top:8px; padding:5px; background:#667eea; color:white; border:none; border-radius:4px; cursor:pointer; font-size:11px;" onclick="window.fetchDetailedWeather(${lat}, ${lng})">
               More Info
@@ -101,7 +118,7 @@
 
     } catch (err) {
       console.error(err);
-      popup.setHTML('<div style="color:red; padding:10px;">Unable to retrieve telemetry.</div>');
+      popup.setHTML('<div style="color:red; padding:10px;">Unable to retrieve atmospheric data.</div>');
     }
   });
 
@@ -355,9 +372,8 @@
                         </label>
                     </div>
                     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px;" id="exp-dates-container">
-                        ${allDates.map((d, i) => {
-        const label = i === allDates.length - 1 ? 'Today/Forecast' : (i === allDates.length - 2 ? 'Yesterday' : d);
-        return `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-date" value="${d}" checked> ${label}</label>`;
+                        ${allDates.map((d) => {
+        return `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-date" value="${d}" checked> ${d}</label>`;
       }).reverse().join('')}
                     </div>
                 </div>
@@ -403,6 +419,9 @@
 
         // Gather Dates
         const selectedDates = Array.from(document.querySelectorAll('.exp-date:checked')).map(cb => cb.value);
+
+        if (selectedFields.length === 0) { alert('Please select at least one data field.'); return; }
+        if (selectedDates.length === 0) { alert('Please select at least one date.'); return; }
 
         // Filter Data
         let finalData = rawData.filter(r => selectedDates.includes(r.date.split(' ')[0]));
@@ -465,23 +484,23 @@
           y1Title = 'Wind Speed (m/s)';
           break;
         case 'pm25':
-          datasets.push({ label: 'PM2.5', data: chartData.map(r => r.pm2_5), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, yAxisID: 'y' });
+          datasets.push({ label: 'Particulate Matter (PM2.5)', data: chartData.map(r => r.pm2_5), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, yAxisID: 'y' });
           yTitle = 'Concentration (μg/m³)';
           break;
         case 'co2':
-          datasets.push({ label: 'CO2', data: chartData.map(r => r.carbon_dioxide), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, yAxisID: 'y' });
+          datasets.push({ label: 'Carbon Dioxide (CO2)', data: chartData.map(r => r.carbon_dioxide), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, yAxisID: 'y' });
           yTitle = 'Concentration (ppm)';
           break;
         case 'aod':
-          datasets.push({ label: 'AOD', data: chartData.map(r => r.aerosol_optical_depth), borderColor: '#ef4444', yAxisID: 'y' });
+          datasets.push({ label: 'Aerosol Optical Depth (AOD)', data: chartData.map(r => r.aerosol_optical_depth), borderColor: '#ef4444', yAxisID: 'y' });
           yTitle = 'Optical Depth';
           break;
         case 'no2':
-          datasets.push({ label: 'NO2', data: chartData.map(r => r.nitrogen_dioxide), borderColor: '#eab308', yAxisID: 'y' });
+          datasets.push({ label: 'Nitrogen Dioxide (NO2)', data: chartData.map(r => r.nitrogen_dioxide), borderColor: '#eab308', yAxisID: 'y' });
           yTitle = 'Concentration (μg/m³)';
           break;
         case 'humidity':
-          datasets.push({ label: 'Humidity', data: chartData.map(r => r.relative_humidity_2m), borderColor: '#0ea5e9', fill: true, backgroundColor: 'rgba(14,165,233,0.2)', yAxisID: 'y' });
+          datasets.push({ label: 'Relative Humidity', data: chartData.map(r => r.relative_humidity_2m), borderColor: '#0ea5e9', fill: true, backgroundColor: 'rgba(14,165,233,0.2)', yAxisID: 'y' });
           yTitle = 'Percentage (%)';
           break;
         case 'soil':
