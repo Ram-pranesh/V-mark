@@ -305,6 +305,7 @@
                      <select id="stats-metric-select" style="padding:4px 8px; border-radius:4px; border:1px solid #ccc; font-size:13px; cursor:pointer; background:#fff;">
                         <option value="temp_wind" ${state.metric === 'temp_wind' ? 'selected' : ''}>Temp & Wind</option>
                         <option value="pm25" ${state.metric === 'pm25' ? 'selected' : ''}>PM2.5</option>
+                        <option value="co" ${state.metric === 'co' ? 'selected' : ''}>CO</option>
                         <option value="co2" ${state.metric === 'co2' ? 'selected' : ''}>CO2</option>
                         <option value="aod" ${state.metric === 'aod' ? 'selected' : ''}>AOD</option>
                         <option value="no2" ${state.metric === 'no2' ? 'selected' : ''}>NO2</option>
@@ -353,13 +354,23 @@
                     <div style="font-weight:700; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
                         1. Select Data Fields
                         <label style="font-weight:400; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer; background:#f0f0f0; padding:2px 6px; border-radius:4px;">
-                            <input type="checkbox" id="exp-field-all" checked> Previous All
+                            <input type="checkbox" id="exp-field-all" checked> All
                         </label>
                     </div>
                     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:8px;" id="exp-fields-container">
-                        ${['Temperature', 'Wind Speed', 'PM2.5', 'CO2', 'AOD', 'NO2', 'Humidity', 'Soil Moisture'].map(f =>
-        `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-field" value="${f}" checked> ${f}</label>`
-      ).join('')}
+                        ${[
+          { val: 'Temperature', label: 'Temperature' },
+          { val: 'Wind Speed', label: 'Wind Speed' },
+          { val: 'PM2.5', label: 'PM<sub>2.5</sub>' },
+          { val: 'CO', label: 'CO' },
+          { val: 'CO2', label: 'CO<sub>2</sub>' },
+          { val: 'AOD', label: 'AOD' },
+          { val: 'NO2', label: 'NO<sub>2</sub>' },
+          { val: 'Humidity', label: 'Humidity' },
+          { val: 'Soil Moisture', label: 'Soil Moisture' }
+        ].map(f =>
+          `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-field" value="${f.val}" checked> ${f.label}</label>`
+        ).join('')}
                     </div>
                 </div>
 
@@ -368,13 +379,13 @@
                     <div style="font-weight:700; margin-bottom:8px; display:flex; gap:10px; align-items:center;">
                         2. Select Dates
                         <label style="font-weight:400; font-size:11px; display:flex; align-items:center; gap:4px; cursor:pointer; background:#f0f0f0; padding:2px 6px; border-radius:4px;">
-                            <input type="checkbox" id="exp-date-all" checked> All 5 Days
+                            <input type="checkbox" id="exp-date-all" checked> All
                         </label>
                     </div>
                     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px;" id="exp-dates-container">
                         ${allDates.map((d) => {
-        return `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-date" value="${d}" checked> ${d}</label>`;
-      }).reverse().join('')}
+          return `<label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" class="exp-date" value="${d}" checked> ${d}</label>`;
+        }).reverse().join('')}
                     </div>
                 </div>
 
@@ -412,7 +423,7 @@
         const selectedFields = Array.from(document.querySelectorAll('.exp-field:checked')).map(cb => cb.value);
         const fieldMap = {
           'Temperature': 'temperature_2m', 'Wind Speed': 'wind_speed_10m', 'PM2.5': 'pm2_5',
-          'CO2': 'carbon_dioxide', 'AOD': 'aerosol_optical_depth', 'NO2': 'nitrogen_dioxide',
+          'CO': 'carbon_monoxide', 'CO2': 'carbon_dioxide', 'AOD': 'aerosol_optical_depth', 'NO2': 'nitrogen_dioxide',
           'Humidity': 'relative_humidity_2m', 'Soil Moisture': 'soil_moisture_0_to_1cm'
         };
         const keepKeys = ['date', ...selectedFields.map(f => fieldMap[f])];
@@ -485,6 +496,10 @@
           break;
         case 'pm25':
           datasets.push({ label: 'Particulate Matter (PM2.5)', data: chartData.map(r => r.pm2_5), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, yAxisID: 'y' });
+          yTitle = 'Concentration (μg/m³)';
+          break;
+        case 'co':
+          datasets.push({ label: 'Carbon Monoxide (CO)', data: chartData.map(r => r.carbon_monoxide), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, yAxisID: 'y' });
           yTitle = 'Concentration (μg/m³)';
           break;
         case 'co2':
