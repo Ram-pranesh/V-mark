@@ -28,10 +28,10 @@
     </div>
 
     <div class="sidebar-content">
-      <div class="layer-group">
+      <div class="layer-group" style="flex-shrink: 0; margin-bottom: 10px;">
         <div class="group-title">
-          <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"
-            fill="currentColor" style="margin-right:8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#ff6b35"
+            style="margin-right:8px;">
             <path
               d="M440-40v-80q-125-14-214.5-103.5T122-438H42v-80h80q14-125 103.5-214.5T440-836v-80h80v80q125 14 214.5 103.5T838-518h80v80h-80q-14 125-103.5 214.5T520-120v80h-80Zm40-158q116 0 198-82t82-198q0-116-82-198t-198-82q-116 0-198 82t-82 198q0 116 82 198t198 82Z" />
           </svg>
@@ -47,9 +47,41 @@
           <input type="checkbox" id="sat-sentinel" onchange="toggleSatellite('sentinel')">
           <span>ESA Sentinel-2</span>
         </label>
+
+        <!-- Sources Dropdown -->
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #333;">
+          <div style="font-size: 11px; color: #888; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+            <span class="material-icons-round" style="font-size: 14px; color: #ff6b35;">filter_alt</span>
+            FIRE DATA SOURCES
+          </div>
+          <div class="dropdown" id="sources-dropdown">
+            <button class="dropdown-toggle" onclick="toggleDropdown('sources-dropdown')">
+              <span id="sources-label">All Sources</span>
+              <span class="material-icons-round">expand_more</span>
+            </button>
+            <div class="dropdown-menu">
+              <label class="dropdown-item">
+                <input type="checkbox" id="source-all" checked onchange="toggleAllSources()">
+                <span>All Sources</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" id="source-modis" checked onchange="toggleIndividualSource()">
+                <span>MODIS Terra/Aqua</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" id="source-viirs-snpp" checked onchange="toggleIndividualSource()">
+                <span>VIIRS SNPP</span>
+              </label>
+              <label class="dropdown-item">
+                <input type="checkbox" id="source-viirs-noaa20" checked onchange="toggleIndividualSource()">
+                <span>VIIRS NOAA-20</span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="layer-group">
+      <div class="layer-group" style="flex-shrink: 0; margin-bottom: 10px;">
         <div class="group-title">
           <span class="material-icons-round">air</span> Atmospheric
         </div>
@@ -66,58 +98,46 @@
       </div>
 
 
-      <div class="layer-group">
-        <div class="group-title">
+      <div class="layer-group" style="flex-shrink: 0; margin-bottom: 2px; padding: 8px;">
+        <div class="group-title" style="margin-bottom: 6px;">
           <span class="material-icons-round">settings</span> Tools
         </div>
-        <div class="tool-row">
-          <button id="sidebar-measure-btn" class="sidebar-tool-full-btn" title="Measure area">
-            <div class="tool-icon">
-              <span class="material-symbols-rounded">activity_zone</span>
-            </div>
-            <div class="tool-info">
-              <div class="tool-label">Measure Area</div>
-              <div id="sidebar-measure-info" class="sidebar-tool-info"></div>
-            </div>
+        <div class="tool-row" style="margin-bottom: 6px; gap: 6px;">
+          <button id="sidebar-measure-btn" class="sidebar-tool-compact-btn" title="Measure area" style="padding: 6px;">
+            <span class="material-symbols-rounded" style="font-size: 16px;">activity_zone</span>
+            <span style="font-size: 12px;">Measure</span>
+          </button>
+          <button id="sidebar-route-btn" class="sidebar-tool-compact-btn" title="Route Planner" style="padding: 6px;">
+            <span class="material-symbols-rounded" style="font-size: 16px;">conversion_path</span>
+            <span style="font-size: 12px;">Route</span>
           </button>
         </div>
-        <div class="tool-row">
-          <button id="sidebar-route-btn" class="sidebar-tool-full-btn" title="Route Planner">
-            <div class="tool-icon">
-              <span class="material-symbols-rounded">conversion_path</span>
-            </div>
-            <div class="tool-info">
-              <div class="tool-label">Route Planner</div>
-              <div id="sidebar-route-info" class="sidebar-tool-info"></div>
-            </div>
-          </button>
-        </div>
-        <div class="tool-row"
-          style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #333; justify-content: center;">
-          <button id="sidebar-reset-btn" class="reset-tool-btn">
-            <span class="material-icons-round" style="font-size: 16px; margin-right: 6px;">restart_alt</span> Reset
+        <div class="tool-row" style="justify-content: center;">
+          <button id="sidebar-reset-btn" class="reset-tool-btn" style="padding: 4px 10px; font-size: 10px;">
+            <span class="material-icons-round" style="font-size: 12px; margin-right: 3px;">restart_alt</span> Reset
           </button>
         </div>
       </div>
 
-      <div class="layer-group">
-        <div class="group-title">
+      <div class="layer-group" style="flex-shrink: 0; margin-bottom: 0; padding: 18px;">
+        <div class="group-title" style="margin-bottom: 12px;">
           <span class="material-icons-round">settings_system_daydream</span> System
         </div>
 
-        <div class="layer-item" onclick="alert('Notification Alert System - No notifications')">
+        <div class="layer-item" onclick="alert('Notification Alert System - No notifications')"
+          style="padding: 10px 12px;">
           <span class="material-icons-round"
-            style="margin-right:12px; font-size:20px; color:#ff6b35;">notifications_none</span>
-          <span>Alert System</span>
+            style="margin-right:12px; font-size:22px; color:#ff6b35;">notifications_none</span>
+          <span style="font-size: 0.95rem;">Alert System</span>
         </div>
 
-        <div class="layer-item" onclick="window.location.href='./drone-mode/index.html'">
-          <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#4aa8ff"
+        <div class="layer-item" onclick="window.location.href='./drone-mode/index.html'" style="padding: 10px 12px;">
+          <svg xmlns="http://www.w3.org/2000/svg" height="22px" viewBox="0 -960 960 960" width="22px" fill="#4aa8ff"
             style="margin-right:12px;">
             <path
               d="M160-160q0-75 41-134.5T307-381l-10-99H160v-240H40v-80h320v80H240v160h48l-8-80h400l-8 80h48v-160H600v-80h321v80H801v240H664l-10 99q65 27 105.5 86.5T800-160h-80q0-66-47-113t-113-47H400q-66 0-113 47t-47 113h-80Zm225-240h189l17-160H368l17 160Zm0 0h189-189Z" />
           </svg>
-          <span>Drone Telemetry</span>
+          <span style="font-size: 0.95rem;">Drone Telemetry</span>
         </div>
       </div>
 
@@ -207,8 +227,8 @@
           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'visible');
           if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', 'none');
 
-          // Show boundaries for Sentinel-2
-          ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+          // Show boundaries AND labels for Sentinel-2
+          ['country-borders', 'country-labels', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
           });
 
@@ -218,7 +238,7 @@
           if (map.getLayer('sentinel-2')) map.setLayoutProperty('sentinel-2', 'visibility', 'none');
 
           // Hide boundaries for ArcGIS
-          ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+          ['country-borders', 'country-labels', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
           });
         }
@@ -226,6 +246,103 @@
 
       syncFireVisibility();
 
+    }
+
+    // Dropdown Toggle
+    function toggleDropdown(dropdownId) {
+      const dropdown = document.getElementById(dropdownId);
+      if (dropdown) {
+        dropdown.classList.toggle('open');
+      }
+      // Close other dropdowns
+      document.querySelectorAll('.dropdown').forEach(d => {
+        if (d.id !== dropdownId) d.classList.remove('open');
+      });
+    }
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
+      }
+    });
+
+    // Source Filter Functions
+    function toggleAllSources() {
+      const allCheckbox = document.getElementById('source-all');
+      const modis = document.getElementById('source-modis');
+      const viirs_snpp = document.getElementById('source-viirs-snpp');
+      const viirs_noaa20 = document.getElementById('source-viirs-noaa20');
+
+      if (allCheckbox.checked) {
+        modis.checked = true;
+        viirs_snpp.checked = true;
+        viirs_noaa20.checked = true;
+      } else {
+        modis.checked = false;
+        viirs_snpp.checked = false;
+        viirs_noaa20.checked = false;
+      }
+
+      updateSourcesLabel();
+      reloadFireData();
+    }
+
+    function toggleIndividualSource() {
+      const allCheckbox = document.getElementById('source-all');
+      const modis = document.getElementById('source-modis');
+      const viirs_snpp = document.getElementById('source-viirs-snpp');
+      const viirs_noaa20 = document.getElementById('source-viirs-noaa20');
+
+      // Update "All" checkbox based on individual selections
+      allCheckbox.checked = modis.checked && viirs_snpp.checked && viirs_noaa20.checked;
+
+      updateSourcesLabel();
+      reloadFireData();
+    }
+
+    function updateSourcesLabel() {
+      const modis = document.getElementById('source-modis');
+      const viirs_snpp = document.getElementById('source-viirs-snpp');
+      const viirs_noaa20 = document.getElementById('source-viirs-noaa20');
+      const label = document.getElementById('sources-label');
+
+      const selected = [];
+      if (modis && modis.checked) selected.push('MODIS');
+      if (viirs_snpp && viirs_snpp.checked) selected.push('VIIRS SNPP');
+      if (viirs_noaa20 && viirs_noaa20.checked) selected.push('VIIRS NOAA-20');
+
+      if (selected.length === 3) {
+        label.textContent = 'All Sources';
+      } else if (selected.length === 0) {
+        label.textContent = 'No Sources';
+      } else {
+        label.textContent = selected.join(', ');
+      }
+    }
+
+    function reloadFireData() {
+      // Update enabled sources
+      if (!window.enabledSources) {
+        window.enabledSources = new Set();
+      } else {
+        window.enabledSources.clear();
+      }
+
+      if (document.getElementById('source-modis')?.checked) {
+        window.enabledSources.add('MODIS_NRT');
+      }
+      if (document.getElementById('source-viirs-snpp')?.checked) {
+        window.enabledSources.add('VIIRS_SNPP_NRT');
+      }
+      if (document.getElementById('source-viirs-noaa20')?.checked) {
+        window.enabledSources.add('VIIRS_NOAA20_NRT');
+      }
+
+      // Reload fire data
+      if (window.loadFires) {
+        window.loadFires();
+      }
     }
 
     // Generic Layer Toggle

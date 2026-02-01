@@ -42,7 +42,33 @@
       type: "line",
       source: "world-countries",
       layout: { visibility: "none" },
-      paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.5 }
+      paint: {
+        "line-color": "#000000",  // Black color
+        "line-width": 1.5,        // Reduced thickness
+        "line-opacity": 0.8
+      }
+    });
+
+    // Add country labels
+    map.addLayer({
+      id: "country-labels",
+      type: "symbol",
+      source: "world-countries",
+      layout: {
+        "visibility": "none",
+        "text-field": ["get", "name"],
+        "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+        "text-size": 14,
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.15,
+        "text-max-width": 8
+      },
+      paint: {
+        "text-color": "#ffffff",
+        "text-halo-color": "#000000",
+        "text-halo-width": 2.5,
+        "text-halo-blur": 1
+      }
     });
 
     // 2. US States with Hover
@@ -73,7 +99,11 @@
       type: "line",
       source: "us-states",
       layout: { visibility: "none" },
-      paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.7 }
+      paint: {
+        "line-color": "#000000",  // Black color
+        "line-width": 1,          // Reduced thickness
+        "line-opacity": 0.8
+      }
     });
 
     // Labels for states
@@ -84,7 +114,7 @@
       layout: {
         "visibility": "none",
         "text-field": ["get", "STATE_NAME"],
-        "text-font": ["Arial Unicode MS Bold"],
+        "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
         "text-size": 12,
         "text-transform": "uppercase",
         "text-letter-spacing": 0.1

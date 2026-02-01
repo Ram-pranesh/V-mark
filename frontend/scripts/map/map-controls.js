@@ -616,7 +616,7 @@
     return Math.abs((area * R * R) / 2);
   }
 
-  // Search Bar
+  // Search Bar with Enhanced Autocomplete
   const searchContainer = document.createElement("div");
   Object.assign(searchContainer.style, {
     position: "absolute",
@@ -629,18 +629,18 @@
     alignItems: "center",
     padding: "0 8px",
     height: "32px",
-    border: "1px solid #ff6b35", // Orange border
+    border: "1px solid #ff6b35",
     boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
   });
 
   const searchInput = document.createElement("input");
-  searchInput.placeholder = "Search location...";
+  searchInput.placeholder = "Search location, fire station, forest office...";
   Object.assign(searchInput.style, {
     background: "transparent",
     border: "none",
     color: "#fff",
     fontSize: "13px",
-    width: "140px",
+    width: "200px",
     outline: "none",
     fontFamily: "inherit"
   });
@@ -655,14 +655,316 @@
     marginLeft: "4px"
   });
 
+  // Autocomplete dropdown
+  const suggestionsDropdown = document.createElement("div");
+  Object.assign(suggestionsDropdown.style, {
+    position: "absolute",
+    top: "38px",
+    left: "0",
+    width: "300px",
+    maxHeight: "300px",
+    overflowY: "auto",
+    background: "#1a1a1a",
+    border: "1px solid #ff6b35",
+    borderRadius: "8px",
+    display: "none",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+    zIndex: 1000
+  });
+
   searchContainer.appendChild(searchInput);
   searchContainer.appendChild(searchBtn);
+  searchContainer.appendChild(suggestionsDropdown);
   document.body.appendChild(searchContainer);
+
+  // Fire Stations and Forest Offices Database (India - Comprehensive)
+  const fireStations = [
+    // Major Cities
+    { name: "Mumbai Fire Brigade HQ", state: "Maharashtra", lat: 18.9388, lon: 72.8354, type: "Fire Station" },
+    { name: "Delhi Fire Service HQ", state: "Delhi", lat: 28.6139, lon: 77.2090, type: "Fire Station" },
+    { name: "Bangalore Fire & Emergency Services", state: "Karnataka", lat: 12.9716, lon: 77.5946, type: "Fire Station" },
+    { name: "Chennai Fire Service", state: "Tamil Nadu", lat: 13.0827, lon: 80.2707, type: "Fire Station" },
+    { name: "Kolkata Fire Brigade", state: "West Bengal", lat: 22.5726, lon: 88.3639, type: "Fire Station" },
+    { name: "Hyderabad Fire Department", state: "Telangana", lat: 17.3850, lon: 78.4867, type: "Fire Station" },
+    { name: "Pune Fire Brigade", state: "Maharashtra", lat: 18.5204, lon: 73.8567, type: "Fire Station" },
+    { name: "Ahmedabad Fire & Emergency Services", state: "Gujarat", lat: 23.0225, lon: 72.5714, type: "Fire Station" },
+
+    // Near Forest Areas
+    { name: "Hasanur Fire Station", state: "Tamil Nadu", lat: 11.55, lon: 77.08, type: "Fire Station" },
+    { name: "Ooty Fire Station", state: "Tamil Nadu", lat: 11.50, lon: 76.65, type: "Fire Station" },
+    { name: "Gundlupet Fire Station", state: "Karnataka", lat: 11.68, lon: 76.35, type: "Fire Station" },
+    { name: "Virajpet Fire Station", state: "Karnataka", lat: 12.10, lon: 75.80, type: "Fire Station" },
+    { name: "Chalakudy Fire Station", state: "Kerala", lat: 10.30, lon: 76.55, type: "Fire Station" },
+    { name: "Nagarjunsagar Fire Station", state: "Andhra Pradesh", lat: 16.30, lon: 79.35, type: "Fire Station" },
+    { name: "Achampet Fire Station", state: "Telangana", lat: 16.05, lon: 78.60, type: "Fire Station" },
+    { name: "Chandrapur Fire Station", state: "Maharashtra", lat: 20.22, lon: 79.30, type: "Fire Station" },
+    { name: "Mandla Fire Station", state: "Madhya Pradesh", lat: 22.30, lon: 80.65, type: "Fire Station" },
+    { name: "Bijapur Fire Station", state: "Chhattisgarh", lat: 18.90, lon: 80.40, type: "Fire Station" },
+    { name: "Junagadh Fire Station", state: "Gujarat", lat: 21.12, lon: 70.80, type: "Fire Station" },
+    { name: "Sawai Madhopur Fire Station", state: "Rajasthan", lat: 26.01, lon: 76.50, type: "Fire Station" },
+    { name: "Baripada Fire Station", state: "Odisha", lat: 21.90, lon: 86.35, type: "Fire Station" },
+    { name: "Canning Fire Station", state: "West Bengal", lat: 21.85, lon: 88.75, type: "Fire Station" },
+    { name: "Bokakhat Fire Station", state: "Assam", lat: 26.58, lon: 93.17, type: "Fire Station" },
+    { name: "Ramnagar Fire Station", state: "Uttarakhand", lat: 29.40, lon: 79.10, type: "Fire Station" }
+  ];
+
+  const forestOffices = [
+    // State HQs
+    { name: "Maharashtra Forest Department", state: "Maharashtra", lat: 18.9220, lon: 72.8347, type: "Forest Office" },
+    { name: "Karnataka Forest Department", state: "Karnataka", lat: 12.9716, lon: 77.5946, type: "Forest Office" },
+    { name: "Tamil Nadu Forest Department", state: "Tamil Nadu", lat: 13.0827, lon: 80.2707, type: "Forest Office" },
+    { name: "Uttarakhand Forest Department", state: "Uttarakhand", lat: 30.0668, lon: 79.0193, type: "Forest Office" },
+    { name: "Madhya Pradesh Forest Department", state: "Madhya Pradesh", lat: 23.2599, lon: 77.4126, type: "Forest Office" },
+    { name: "Kerala Forest Department", state: "Kerala", lat: 10.8505, lon: 76.2711, type: "Forest Office" },
+    { name: "Himachal Pradesh Forest Department", state: "Himachal Pradesh", lat: 31.1048, lon: 77.1734, type: "Forest Office" },
+    { name: "Assam Forest Department", state: "Assam", lat: 26.2006, lon: 92.9376, type: "Forest Office" },
+    { name: "West Bengal Forest Department", state: "West Bengal", lat: 22.5726, lon: 88.3639, type: "Forest Office" },
+    { name: "Odisha Forest Department", state: "Odisha", lat: 20.9517, lon: 85.0985, type: "Forest Office" },
+
+    // All 16 Forest Divisions from Drone Data
+    { name: "Satyamangalam Forest Division", state: "Tamil Nadu", lat: 11.55, lon: 77.08, type: "Forest Office" },
+    { name: "Nilgiris North Forest Division", state: "Tamil Nadu", lat: 11.50, lon: 76.65, type: "Forest Office" },
+    { name: "Bandipur Forest Division", state: "Karnataka", lat: 11.68, lon: 76.35, type: "Forest Office" },
+    { name: "Virajpet Forest Division", state: "Karnataka", lat: 12.10, lon: 75.80, type: "Forest Office" },
+    { name: "Vazhachal Forest Division", state: "Kerala", lat: 10.30, lon: 76.55, type: "Forest Office" },
+    { name: "Nagarjunsagar Forest Division", state: "Andhra Pradesh", lat: 16.30, lon: 79.35, type: "Forest Office" },
+    { name: "Amrabad Forest Division", state: "Telangana", lat: 16.05, lon: 78.60, type: "Forest Office" },
+    { name: "Tadoba Forest Division", state: "Maharashtra", lat: 20.22, lon: 79.30, type: "Forest Office" },
+    { name: "Kanha Forest Division", state: "Madhya Pradesh", lat: 22.30, lon: 80.65, type: "Forest Office" },
+    { name: "Indravati Forest Division", state: "Chhattisgarh", lat: 18.90, lon: 80.40, type: "Forest Office" },
+    { name: "Junagadh Forest Division", state: "Gujarat", lat: 21.12, lon: 70.80, type: "Forest Office" },
+    { name: "Sawai Madhopur Forest Division", state: "Rajasthan", lat: 26.01, lon: 76.50, type: "Forest Office" },
+    { name: "Simlipal Forest Division", state: "Odisha", lat: 21.90, lon: 86.35, type: "Forest Office" },
+    { name: "24 Parganas (South) Division", state: "West Bengal", lat: 21.85, lon: 88.75, type: "Forest Office" },
+    { name: "Golaghat Forest Division", state: "Assam", lat: 26.58, lon: 93.17, type: "Forest Office" },
+    { name: "Ramnagar Forest Division", state: "Uttarakhand", lat: 29.40, lon: 79.10, type: "Forest Office" }
+  ];
+
+  let searchTimeout;
+  const fetchSuggestions = (query) => {
+    if (!query || query.length < 2) {
+      suggestionsDropdown.style.display = "none";
+      return;
+    }
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      suggestionsDropdown.innerHTML = "";
+      const lowerQuery = query.toLowerCase();
+      let hasResults = false;
+
+      // Search Fire Stations
+      const matchingFireStations = fireStations.filter(station =>
+        station.name.toLowerCase().includes(lowerQuery) ||
+        station.state.toLowerCase().includes(lowerQuery)
+      );
+
+      // Search Forest Offices
+      const matchingForestOffices = forestOffices.filter(office =>
+        office.name.toLowerCase().includes(lowerQuery) ||
+        office.state.toLowerCase().includes(lowerQuery)
+      );
+
+      // Add Fire Stations
+      if (matchingFireStations.length > 0) {
+        const categoryHeader = document.createElement("div");
+        categoryHeader.innerHTML = '<span class="material-icons-round" style="font-size: 14px; margin-right: 6px; vertical-align: middle;">fire_truck</span>Fire Stations';
+        Object.assign(categoryHeader.style, {
+          padding: "6px 12px",
+          fontSize: "11px",
+          fontWeight: "700",
+          color: "#ff6b35",
+          background: "#0f0f0f",
+          borderBottom: "1px solid #333",
+          display: "flex",
+          alignItems: "center"
+        });
+        suggestionsDropdown.appendChild(categoryHeader);
+
+        matchingFireStations.slice(0, 3).forEach(station => {
+          const item = createSuggestionItem(station.name, station.state, station.type, station.lat, station.lon);
+          suggestionsDropdown.appendChild(item);
+        });
+        hasResults = true;
+      }
+
+      // Add Forest Offices
+      if (matchingForestOffices.length > 0) {
+        const categoryHeader = document.createElement("div");
+        categoryHeader.innerHTML = '<span style="margin-right: 6px; display: flex; align-items: center;"><svg xmlns="http://www.w3.org/2000/svg" height="14px" viewBox="0 -960 960 960" width="14px" fill="#00C851"><path d="M200-80v-80h240v-160h-80q-83 0-141.5-58.5T160-520q0-60 33-110.5t89-73.5q9-75 65.5-125.5T480-880q76 0 132.5 50.5T678-704q56 23 89 73.5T800-520q0 83-58.5 141.5T600-320h-80v160h240v80H200Zm160-320h240q50 0 85-35t35-85q0-36-20.5-66T646-630l-42-18-6-46q-6-45-39.5-75.5T480-800q-45 0-78.5 30.5T362-694l-6 46-42 18q-33 14-53.5 44T240-520q0 50 35 85t85 35Zm120-200Z"/></svg></span>Forest Offices';
+        Object.assign(categoryHeader.style, {
+          padding: "6px 12px",
+          fontSize: "11px",
+          fontWeight: "700",
+          color: "#00C851",
+          background: "#0f0f0f",
+          borderBottom: "1px solid #333",
+          display: "flex",
+          alignItems: "center"
+        });
+        suggestionsDropdown.appendChild(categoryHeader);
+
+        matchingForestOffices.slice(0, 3).forEach(office => {
+          const item = createSuggestionItem(office.name, office.state, office.type, office.lat, office.lon);
+          suggestionsDropdown.appendChild(item);
+        });
+        hasResults = true;
+      }
+
+      // Fetch general locations from Nominatim with more details
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&countrycodes=in`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            if (hasResults) {
+              const categoryHeader = document.createElement("div");
+              categoryHeader.innerHTML = '<span style="margin-right: 6px; display: flex; align-items: center;"><svg xmlns="http://www.w3.org/2000/svg" height="14px" viewBox="0 -960 960 960" width="14px" fill="#4aa8ff"><path d="M480-80q-106 0-173-33.5T240-200q0-24 14.5-44.5T295-280l63 59q-9 4-19.5 9T322-200q13 16 60 28t98 12q51 0 98.5-12t60.5-28q-7-8-18-13t-21-9l62-60q28 16 43 36.5t15 45.5q0 53-67 86.5T480-80Zm1-220q99-73 149-146.5T680-594q0-102-65-154t-135-52q-70 0-135 52t-65 154q0 67 49 139.5T481-300Zm-1 100Q339-304 269.5-402T200-594q0-71 25.5-124.5T291-808q40-36 90-54t99-18q49 0 99 18t90 54q40 36 65.5 89.5T760-594q0 94-69.5 192T480-200Zm0-320q33 0 56.5-23.5T560-600q0-33-23.5-56.5T480-680q-33 0-56.5 23.5T400-600q0 33 23.5 56.5T480-520Zm0-80Z"/></svg></span>Locations';
+              Object.assign(categoryHeader.style, {
+                padding: "6px 12px",
+                fontSize: "11px",
+                fontWeight: "700",
+                color: "#4aa8ff",
+                background: "#0f0f0f",
+                borderBottom: "1px solid #333",
+                display: "flex",
+                alignItems: "center"
+              });
+              suggestionsDropdown.appendChild(categoryHeader);
+            }
+
+            data.forEach(location => {
+              const address = location.address || {};
+              const state = address.state || "";
+              const district = address.state_district || address.county || "";
+              const city = address.city || address.town || address.village || "";
+
+              let displayName = location.display_name;
+              // Create more specific display with state info
+              if (state) {
+                const parts = [city, district, state].filter(p => p);
+                if (parts.length > 0) {
+                  displayName = parts.join(", ");
+                }
+              }
+
+              const item = createSuggestionItem(
+                displayName,
+                state || "India",
+                location.type || "Location",
+                parseFloat(location.lat),
+                parseFloat(location.lon)
+              );
+              suggestionsDropdown.appendChild(item);
+            });
+            hasResults = true;
+          }
+
+          if (hasResults) {
+            suggestionsDropdown.style.display = "block";
+          } else {
+            suggestionsDropdown.style.display = "none";
+          }
+        })
+        .catch(e => {
+          console.error(e);
+          if (hasResults) {
+            suggestionsDropdown.style.display = "block";
+          } else {
+            suggestionsDropdown.style.display = "none";
+          }
+        });
+
+      // Show local results immediately if available
+      if (hasResults) {
+        suggestionsDropdown.style.display = "block";
+      }
+    }, 300);
+  };
+
+  function createSuggestionItem(name, location, type, lat, lon) {
+    const suggestionItem = document.createElement("div");
+    Object.assign(suggestionItem.style, {
+      padding: "8px 12px",
+      cursor: "pointer",
+      fontSize: "12px",
+      color: "#ccc",
+      borderBottom: "1px solid #2a2a2a",
+      transition: "background 0.2s",
+      display: "flex",
+      flexDirection: "column",
+      gap: "2px"
+    });
+
+    const nameDiv = document.createElement("div");
+    nameDiv.textContent = name;
+    nameDiv.style.fontWeight = "500";
+    nameDiv.style.color = "#fff";
+
+    const detailsDiv = document.createElement("div");
+    detailsDiv.textContent = `${location} • ${type}`;
+    detailsDiv.style.fontSize = "10px";
+    detailsDiv.style.color = "#888";
+
+    suggestionItem.appendChild(nameDiv);
+    suggestionItem.appendChild(detailsDiv);
+
+    suggestionItem.onmouseenter = () => {
+      suggestionItem.style.background = "#2a2a2a";
+    };
+    suggestionItem.onmouseleave = () => {
+      suggestionItem.style.background = "transparent";
+    };
+
+    suggestionItem.onclick = () => {
+      searchInput.value = name;
+      suggestionsDropdown.style.display = "none";
+      map.flyTo({
+        center: [lon, lat],
+        zoom: 14
+      });
+    };
+
+    return suggestionItem;
+  }
+
+  searchInput.oninput = (e) => {
+    fetchSuggestions(e.target.value);
+  };
+
+  searchInput.onfocus = () => {
+    if (searchInput.value.length >= 2) {
+      fetchSuggestions(searchInput.value);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!searchContainer.contains(e.target)) {
+      suggestionsDropdown.style.display = "none";
+    }
+  });
 
   const doSearch = () => {
     const q = searchInput.value;
     if (!q) return;
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`)
+    suggestionsDropdown.style.display = "none";
+
+    // Check local database first
+    const allLocations = [...fireStations, ...forestOffices];
+    const localMatch = allLocations.find(loc =>
+      loc.name.toLowerCase().includes(q.toLowerCase())
+    );
+
+    if (localMatch) {
+      map.flyTo({
+        center: [localMatch.lon, localMatch.lat],
+        zoom: 14
+      });
+      return;
+    }
+
+    // Fall back to Nominatim
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in`)
       .then(r => r.json())
       .then(data => {
         if (data && data.length > 0) {
@@ -677,7 +979,13 @@
   };
 
   searchBtn.onclick = doSearch;
-  searchInput.onkeydown = (e) => { if (e.key === "Enter") doSearch(); };
+  searchInput.onkeydown = (e) => {
+    if (e.key === "Enter") {
+      doSearch();
+    } else if (e.key === "Escape") {
+      suggestionsDropdown.style.display = "none";
+    }
+  };
 
   if (typeof StackControl !== 'undefined') {
     map.addControl(new StackControl(), "top-right");

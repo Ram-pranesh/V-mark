@@ -203,6 +203,7 @@ body {
     display: none;
     background: #000;
     pointer-events: none;
+    /* Container doesn't block clicks */
 }
 
 #wind-history-container.sidebar-open {
@@ -215,6 +216,8 @@ body {
     width: 100%;
     height: 100%;
     display: block;
+    pointer-events: auto;
+    /* Allow iframe to receive mouse events */
 }
 
 #coords {
@@ -297,8 +300,13 @@ body {
 
 .sidebar-content {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: hidden;
+    /* Changed from auto to hidden */
     padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* Consistent spacing between groups */
 }
 
 .sidebar-content::-webkit-scrollbar {
@@ -314,11 +322,71 @@ body {
     background: #444;
 }
 
+/* Compact Tool Button Style */
+.sidebar-tool-compact-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex: 1;
+    background: linear-gradient(135deg, #10131c, #0c0f17);
+    color: #f5f7fb;
+    border: 1px solid #2c3342;
+    border-radius: 10px;
+    padding: 10px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-tool-compact-btn:hover {
+    transform: translateY(-1px);
+    border-color: #4aa8ff;
+    background: linear-gradient(135deg, #182235, #0f1829);
+}
+
+.sidebar-tool-compact-btn.active {
+    background: linear-gradient(135deg, #182235, #0f1829);
+    border-color: #4aa8ff;
+}
+
+/* Square Tool Button Style */
+.sidebar-tool-square-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, #10131c, #0c0f17);
+    color: #f5f7fb;
+    border: 1px solid #2c3342;
+    border-radius: 10px;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-size: 20px;
+}
+
+.sidebar-tool-square-btn:hover {
+    transform: translateY(-1px);
+    border-color: #4aa8ff;
+    background: linear-gradient(135deg, #182235, #0f1829);
+}
+
+.sidebar-tool-square-btn.active {
+    background: linear-gradient(135deg, #182235, #0f1829);
+    border-color: #4aa8ff;
+}
+
 .layer-group {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
+    /* Reduced from 20px */
     background: #1a1a1a;
     border-radius: 8px;
-    padding: 10px;
+    padding: 15px;
+    /* Changed from 10px to match drone telemetry */
 }
 
 .group-title {
@@ -340,12 +408,14 @@ body {
 .layer-item {
     display: flex;
     align-items: center;
-    padding: 8px;
+    padding: 8px 10px;
+    /* Changed from 8px to match drone telemetry */
     border-radius: 6px;
     cursor: pointer;
     transition: background 0.2s;
     color: #ccc;
-    font-size: 13px;
+    font-size: 0.9rem;
+    /* Changed from 13px to match drone telemetry */
 }
 
 .layer-item:hover {

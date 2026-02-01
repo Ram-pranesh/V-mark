@@ -11,6 +11,7 @@
       "contour-text",
       "hills", // New hillshade layer
       "country-borders",
+      "country-labels",
       "state-borders",
       "state-fills",
       "state-labels"
@@ -41,7 +42,7 @@
         if (map.getLayer("sentinel-2")) map.setLayoutProperty("sentinel-2", "visibility", "visible");
         if (map.getLayer("satellite")) map.setLayoutProperty("satellite", "visibility", "none");
 
-        ['country-borders', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
+        ['country-borders', 'country-labels', 'state-borders', 'state-fills', 'state-labels'].forEach(id => {
           if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "visible");
         });
       } else {

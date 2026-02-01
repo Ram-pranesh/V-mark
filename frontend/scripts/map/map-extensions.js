@@ -49,11 +49,17 @@
         const north = (FETCH_GLOBAL ? 90 : bounds.getNorth()).toFixed(2);
 
         // FIRMS API endpoints for different satellites
-        const sources = [
+        const allSources = [
             { id: 'VIIRS_SNPP_NRT', name: 'VIIRS SNPP' },
             { id: 'VIIRS_NOAA20_NRT', name: 'VIIRS NOAA-20' },
             { id: 'MODIS_NRT', name: 'MODIS Terra/Aqua' }
         ];
+
+        // Filter sources based on user selection
+        if (!window.enabledSources) {
+            window.enabledSources = new Set(['MODIS_NRT', 'VIIRS_SNPP_NRT', 'VIIRS_NOAA20_NRT']);
+        }
+        const sources = allSources.filter(s => window.enabledSources.has(s.id));
 
         let allFeatures = [];
         const targetDate = clampToWindow(selectedDate || todayIso());
@@ -67,8 +73,8 @@
 
         for (const source of sources) {
             try {
-                // Use area endpoint with bounding box
-                const url = `/firms/area?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${daySpan}`;
+                // Use the new processed endpoint that filters and classifies data
+                const url = `/firms/area/processed?source=${encodeURIComponent(source.id)}&west=${west}&south=${south}&east=${east}&north=${north}&days=${daySpan}`;
 
                 console.log(`Fetching ${source.name}...`);
 
@@ -82,18 +88,13 @@
                     continue;
                 }
 
-                const text = await response.text();
+                const geojson = await response.json();
 
-                // Check if it's valid CSV
-                if (text.includes('<!DOCTYPE') || text.includes('<html') || text.length < 50) {
-                    console.warn(`${source.name}: Invalid response`, text.slice(0, 200));
-                    continue;
-                }
-
-                const features = csvToGeoJSON(text, source.name).filter((f) => !targetDate || f.properties.date === targetDate);
+                // Filter by target date if specified
+                const features = geojson.features.filter((f) => !targetDate || f.properties.acq_date === targetDate);
                 allFeatures = allFeatures.concat(features);
 
-                console.log(`${source.name}: ${features.length} records`);
+                console.log(`${source.name}: ${features.length} records (${geojson.metadata.filtered_detections} after filtering)`);
 
             } catch (err) {
                 if (err.name === 'AbortError') {
@@ -180,11 +181,12 @@
                         8, ['interpolate', ['linear'], ['get', 'frp'], 0, 8, 100, 20, 500, 40]
                     ],
                     'circle-color': [
-                        'interpolate', ['linear'], ['get', 'frp'],
-                        0, '#ffff00',
-                        50, '#ffa500',
-                        150, '#ff4500',
-                        300, '#ff0000'
+                        'match',
+                        ['get', 'display_color'],
+                        'yellow', '#ffeb3b',
+                        'orange', '#ff9800',
+                        'red', '#f44336',
+                        '#ff4500' // default
                     ],
                     'circle-blur': 1,
                     'circle-opacity': 0.5
@@ -203,11 +205,12 @@
                         8, ['interpolate', ['linear'], ['get', 'frp'], 0, 5, 100, 12, 500, 25]
                     ],
                     'circle-color': [
-                        'interpolate', ['linear'], ['get', 'frp'],
-                        0, '#ffff00',
-                        50, '#ffa500',
-                        150, '#ff4500',
-                        300, '#ff0000'
+                        'match',
+                        ['get', 'display_color'],
+                        'yellow', '#ffeb3b',
+                        'orange', '#ff9800',
+                        'red', '#f44336',
+                        '#ff4500' // default
                     ],
                     'circle-stroke-width': 1,
                     'circle-stroke-color': '#fff'
@@ -220,22 +223,34 @@
                 const p = f.properties;
                 const coords = f.geometry.coordinates;
 
+                // Determine severity badge color
+                const severityBadgeColor = p.display_color === 'yellow' ? '#fbc02d' :
+                    p.display_color === 'orange' ? '#f57c00' : '#d32f2f';
+
+                // Format confidence display - keep VIIRS as original (l/n/h)
+                let confidenceDisplay = p.confidence;
+                if (typeof p.confidence === 'number') {
+                    confidenceDisplay = p.confidence + '%';
+                }
+                // For VIIRS, keep as-is (l, n, h)
+
                 new maplibregl.Popup()
                     .setLngLat(coords)
                     .setHTML(`
-                        <div style="font-family: system-ui; min-width: 200px;">
-                            <div style="background: #e7e7e7; padding: 6px 10px; border-radius: 6px 6px 0 0; border-bottom: 2px solid #ff4500; font-weight: 700; color: #d35400; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
-                                 <span>Fire Detected</span>
-                                 <span style="font-size: 10px; background: #ff4500; color: #fff; padding: 2px 6px; border-radius: 4px;">Active</span>
+                        <div style="font-family: system-ui; min-width: 220px;">
+                            <div style="background: #110d0dc5; padding: 6px 10px; border-radius: 6px 6px 0 0; border-bottom: 2px solid ${severityBadgeColor}; font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center;">
+                                 <span style="color: ${severityBadgeColor};">Fire Hotspot</span>
+                                 <span style="font-size: 10px; background: ${severityBadgeColor}; color: #fff; padding: 2px 6px; border-radius: 4px;">${p.severity_label || 'Active'}</span>
                             </div>
                             <div style="background: #fff; padding: 10px; border-radius: 0 0 6px 6px; font-size: 12px; line-height: 1.6; color: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+                                <div style="margin-bottom: 6px;">
+                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Confidence:</span>
+                                    <b>${confidenceDisplay}</b>
+                                </div>
                                 <div style="margin-bottom: 6px;">
                                     <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Intensity:</span>
                                     <b style="color: #000;">${p.frp} MW</b>
-                                </div>
-                                <div style="margin-bottom: 6px;">
-                                    <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Confidence:</span>
-                                    <b>${p.confidence}</b>
                                 </div>
                                 <div style="margin-bottom: 6px;">
                                     <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Brightness:</span>
@@ -243,14 +258,14 @@
                                 </div>
                                 <div style="margin-bottom: 6px;">
                                     <span style="display:inline-block; width: 80px; color: #666; font-weight: 500;">Source:</span>
-                                    <b>${p.source}</b>
+                                    <b style="white-space: nowrap;">${p.source || p.satellite}</b>
                                 </div>
                                 <hr style="border: 0; border-top: 1px solid #eee; margin: 8px 0;">
                                 <div style="margin-bottom: 4px;">
-                                    <span style="color: #666;">Date:</span> ${p.date}
+                                    <span style="color: #666;">Date:</span> ${p.acq_date || p.date}
                                 </div>
                                 <div style="margin-bottom: 4px;">
-                                    <span style="color: #666;">Time:</span> ${p.time} UTC
+                                    <span style="color: #666;">Time:</span> ${p.acq_time || p.time} UTC
                                 </div>
                                 <div>
                                     <span style="color: #666;">Location:</span> <a href="#" style="color: #3498db; text-decoration: none;">${coords[1].toFixed(4)}°, ${coords[0].toFixed(4)}°</a>

@@ -203,6 +203,8 @@ const UI = {
             // 1. Hide Video & Live Overlay
             if (video) video.style.display = 'none';
             if (overlay) overlay.style.display = 'none';
+            const maxBtn = document.getElementById('max-btn');
+            if (maxBtn) maxBtn.style.display = 'none';
 
             // 2. Show Charging Animation (fills the video container)
             this.toggleChargingMode(true);
@@ -215,17 +217,36 @@ const UI = {
             // 2. Show Video & Live Overlay
             if (video) {
                 video.style.display = 'block';
+                const overlay = document.getElementById('video-overlay');
                 if (overlay) overlay.style.display = 'block';
+
+                const maxBtn = document.getElementById('max-btn');
+                if (maxBtn) maxBtn.style.display = 'block';
 
                 const vidMap = {
                     1: 'drone-gif.mp4',
                     2: 'drone-video2.mp4',
                     3: 'drone-video3.mp4',
-                    4: 'drrone-video4.mp4',
+                    4: 'drone-video4.mp4',
                     5: 'drone-video5.mp4'
                 };
                 const file = vidMap[dData.video_id] || 'drone-gif.mp4';
                 video.src = `../assets/img/${file}`;
+
+                // Uniqueness: Random start time & specific filter per drone ID
+                const filters = [
+                    'none',
+                    'contrast(1.15) saturate(1.1)',
+                    'brightness(1.05) hue-rotate(15deg)',
+                    'sepia(0.2) contrast(1.1)',
+                    'brightness(0.95) hue-rotate(-10deg) saturate(1.2)'
+                ];
+                video.style.filter = filters[(dData.video_id - 1) % filters.length] || 'none';
+
+                video.onloadedmetadata = () => {
+                    video.currentTime = (dData.video_id * 15) % video.duration; // Deterministic offset
+                };
+
                 video.play().catch(e => { console.error("Video play failed", e); });
             }
         }
@@ -501,10 +522,39 @@ const UI = {
     },
 
     toggleVideoSize(max) {
+        if (!this.state.selectedDock) {
+            alert('Please select a docking station first');
+            return;
+        }
+
         const m = document.getElementById('video-modal');
         if (m) {
-            if (max) m.classList.add('active');
-            else m.classList.remove('active');
+            if (max) {
+                m.classList.add('active');
+
+                // Sync video source to the selected drone
+                const vid = m.querySelector('video');
+                if (vid && this.state.selectedDrone) {
+                    const dData = window.DRONE_DB.drones[this.state.selectedDrone];
+                    if (dData && dData.status !== 'Charging') {
+                        const vidMap = {
+                            1: 'drone-gif.mp4',
+                            2: 'drone-video2.mp4',
+                            3: 'drone-video3.mp4',
+                            4: 'drone-video4.mp4',
+                            5: 'drone-video5.mp4'
+                        };
+                        const file = vidMap[dData.video_id] || 'drone-gif.mp4';
+                        vid.src = `../assets/img/${file}`;
+                        vid.play().catch(e => console.error("Modal video play failed", e));
+                    }
+                }
+            } else {
+                m.classList.remove('active');
+                // Optional: Pause video when closed to save resources
+                const vid = m.querySelector('video');
+                if (vid) vid.pause();
+            }
         }
     },
 
@@ -529,14 +579,18 @@ const UI = {
             1: 'drone-gif.mp4',
             2: 'drone-video2.mp4',
             3: 'drone-video3.mp4',
-            4: 'drrone-video4.mp4',
+            4: 'drone-video4.mp4',
             5: 'drone-video5.mp4'
         };
 
         // Create grid items for each drone
         drones.forEach(drone => {
-            const isCharging = drone.status === 'Charging';
-            const videoFile = vidMap[drone.video_id] || 'drone-gif.mp4';
+            // Get full drone data from database
+            const dData = window.DRONE_DB.drones[drone.id];
+            const isCharging = dData.status === 'Charging';
+            const videoFile = vidMap[dData.video_id] || 'drone-gif.mp4';
+
+            console.log(`Drone ${dData.id}: video_id=${dData.video_id}, file=${videoFile}, status=${dData.status}`);
 
             const gridItem = document.createElement('div');
             gridItem.style.cssText = `
@@ -548,20 +602,33 @@ const UI = {
                 flex-direction: column;
             `;
 
+            // Uniqueness Filters
+            const filters = [
+                'none',
+                'contrast(1.15) saturate(1.1)',
+                'brightness(1.05) hue-rotate(15deg)',
+                'sepia(0.2) contrast(1.1)',
+                'brightness(0.95) hue-rotate(-10deg) saturate(1.2)'
+            ];
+            const filter = filters[(dData.video_id - 1) % filters.length] || 'none';
+
             gridItem.innerHTML = `
                 <div style="padding: 10px; background: #111; border-bottom: 1px solid #1f1f1f; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #ff6b35; font-weight: 600; font-size: 0.9rem;">${drone.id}</span>
-                    <span style="color: ${isCharging ? '#00C851' : '#888'}; font-size: 0.75rem; text-transform: uppercase;">${drone.status}</span>
+                    <span style="color: #ff6b35; font-weight: 600; font-size: 0.9rem;">${dData.id}</span>
+                    <span style="color: ${isCharging ? '#00C851' : '#888'}; font-size: 0.75rem; text-transform: uppercase;">${dData.status}</span>
                 </div>
                 <div style="position: relative; width: 100%; height: 200px; background: #000;">
                     ${isCharging ?
                     `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#00C851; font-size:0.9rem;">⚡ CHARGING</div>` :
-                    `<video src="../assets/img/${videoFile}" autoplay loop muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>`
+                    `<video src="../assets/img/${videoFile}" autoplay loop muted playsinline 
+                        style="width:100%; height:100%; object-fit:cover; filter:${filter};"
+                        onloadedmetadata="this.currentTime = (${dData.video_id} * 15) % this.duration"
+                     ></video>`
                 }
                 </div>
                 <div style="padding: 8px; background: #111; display: flex; justify-content: space-between; font-size: 0.75rem;">
-                    <span style="color: #888;">Battery: <span style="color: ${isCharging ? '#00C851' : '#fff'};">${isCharging ? 'Charging...' : Math.floor(drone.batt) + '%'}</span></span>
-                    <span style="color: #888;">Speed: <span style="color: #fff;">${isCharging ? '--' : drone.telemetry.speed + ' km/h'}</span></span>
+                    <span style="color: #888;">Battery: <span style="color: ${isCharging ? '#00C851' : '#fff'};">${isCharging ? 'Charging...' : Math.floor(dData.batt) + '%'}</span></span>
+                    <span style="color: #888;">Speed: <span style="color: #fff;">${isCharging ? '--' : dData.telemetry.speed + ' km/h'}</span></span>
                 </div>
             `;
 

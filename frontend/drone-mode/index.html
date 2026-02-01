@@ -71,18 +71,18 @@
                                     <span style="font-size:0.7rem; color:#fff;" id="val-high">0</span>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:10px;">
-                                    <span style="font-size:0.7rem; color:#ffbb33; width:40px;">MED</span>
+                                    <span style="font-size:0.7rem; color:#ff9800; width:40px;">MED</span>
                                     <div
                                         style="flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden;">
-                                        <div id="bar-med" style="width:0%; height:100%; background:#ffbb33;"></div>
+                                        <div id="bar-med" style="width:0%; height:100%; background:#ff9800;"></div>
                                     </div>
                                     <span style="font-size:0.7rem; color:#fff;" id="val-med">0</span>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:10px;">
-                                    <span style="font-size:0.7rem; color:#00C851; width:40px;">LOW</span>
+                                    <span style="font-size:0.7rem; color:#ffeb3b; width:40px;">LOW</span>
                                     <div
                                         style="flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden;">
-                                        <div id="bar-low" style="width:0%; height:100%; background:#00C851;"></div>
+                                        <div id="bar-low" style="width:0%; height:100%; background:#ffeb3b;"></div>
                                     </div>
                                     <span style="font-size:0.7rem; color:#fff;" id="val-low">0</span>
                                 </div>
@@ -111,7 +111,7 @@
                     <div class="control-item">
                         <span class="material-icons-round"
                             style="color:#ff6b35; margin-right:5px;">notifications_active</span>
-                        <span>Alert System Active</span>
+                        <span>Alert System</span>
                     </div>
 
                     <div class="control-item" onclick="window.location.href='../index.html'">
@@ -227,6 +227,12 @@
                         <div id="video-overlay"
                             style="display:none; position:absolute; top:10px; right:10px; background:rgba(255,0,0,0.7); color:#fff; font-size:0.6rem; padding:2px 6px; border-radius:4px; font-weight:bold;">
                             LIVE</div>
+
+                        <!-- Maximize Button Overlay -->
+                        <button onclick="DroneUI.toggleVideoSize(true)" id="max-btn"
+                            style="display:none; position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.5); border:none; border-radius:4px; padding:4px; cursor:pointer; color:#fff; transition:all 0.2s;">
+                            <span class="material-icons-round" style="font-size:18px;">fullscreen</span>
+                        </button>
                     </div>
 
                     <!-- Telemetry Grid -->
@@ -256,10 +262,6 @@
 
                         <!-- Maximize & View All Drones -->
                         <div style="display:flex; justify-content:center; gap:15px; margin-top:4px;">
-                            <span class="material-icons-round"
-                                style="cursor:pointer; color:#888; transition:color 0.2s;"
-                                onclick="DroneUI.toggleVideoSize(true)" onmouseover="this.style.color='#fff'"
-                                onmouseout="this.style.color='#888'" title="Maximize">expand_less</span>
                             <span class="material-icons-round"
                                 style="cursor:pointer; color:#888; transition:color 0.2s;"
                                 onclick="DroneUI.showAllDrones()" onmouseover="this.style.color='#fff'"
@@ -352,9 +354,11 @@
     </div>
 
     <!-- Logic -->
-    <script src="./scripts/drone-data.js"></script>
-    <script src="./scripts/drone-ui.js"></script>
-    <script src="./scripts/drone-map.js"></script>
+    <script src="../scripts/map/map-theme.js?v=2"></script>
+    <script src="scripts/drone-data.js?v=2"></script>
+    <script src="./scripts/fire-service.js"></script>
+    <script src="scripts/drone-ui.js?v=2"></script>
+    <script src="scripts/drone-map.js?v=2"></script>
     <script>
         window.addEventListener('DOMContentLoaded', () => {
             UI.init(); // Just init, don't auto select to let user see dropdown

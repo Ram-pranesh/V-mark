@@ -2,6 +2,8 @@ import os
 from flask import Flask, jsonify, send_from_directory, request
 import requests
 from dotenv import load_dotenv
+from fire_processor import process_fire_data, csv_to_fire_data
+from india_hotspot_filter import filter_hotspots_for_india, is_point_in_india
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
@@ -88,6 +90,140 @@ def firms_area():
         return jsonify({"error": "FIRMS request failed", "status": resp.status_code, "details": resp.text[:500]}), 502
 
     return resp.text, 200, {"Content-Type": "text/csv; charset=utf-8"}
+
+
+@app.get("/firms/area/processed")
+def firms_area_processed():
+    """
+    Returns processed and filtered fire data with severity classifications.
+    Filters out low-confidence detections (< 60%) and normalizes VIIRS categorical data.
+    """
+    api_key = get_env("FIRMS_MAP_KEY")
+    if not api_key:
+        return jsonify({"error": "FIRMS_MAP_KEY not configured"}), 400
+
+    source = request.args.get("source")
+    west = request.args.get("west")
+    south = request.args.get("south")
+    east = request.args.get("east")
+    north = request.args.get("north")
+    days = request.args.get("days", "1")
+
+    if not all([source, west, south, east, north]):
+        return jsonify({"error": "Missing required query params"}), 400
+
+    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{west},{south},{east},{north}/{days}"
+    try:
+        resp = requests.get(url, timeout=20)
+    except requests.RequestException as exc:
+        return jsonify({"error": "FIRMS request failed", "details": str(exc)}), 502
+
+    if resp.status_code != 200:
+        return jsonify({"error": "FIRMS request failed", "status": resp.status_code, "details": resp.text[:500]}), 502
+
+    # Convert CSV to fire data with clean source name
+    source_name_map = {
+        'MODIS_NRT': 'MODIS Terra/Aqua',
+        'VIIRS_SNPP_NRT': 'VIIRS SNPP',
+        'VIIRS_NOAA20_NRT': 'VIIRS NOAA-20'
+    }
+    clean_source_name = source_name_map.get(source, source)
+    
+    fire_data = csv_to_fire_data(resp.text, clean_source_name)
+    
+    # Process and filter the data
+    processed_data = process_fire_data(fire_data)
+    
+    return jsonify({
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [point["longitude"], point["latitude"]]
+                },
+                "properties": point
+            }
+            for point in processed_data
+        ],
+        "metadata": {
+            "total_detections": len(fire_data),
+            "filtered_detections": len(processed_data),
+            "source": clean_source_name,
+            "date_range_days": days
+        }
+    })
+
+@app.get("/firms/area/india")
+def firms_area_india():
+    """
+    Returns processed fire data filtered for India only (for drone telemetry).
+    Satellite telemetry uses /firms/area/processed (shows all global hotspots).
+    Drone telemetry uses this endpoint (shows only India hotspots).
+    """
+    api_key = get_env("FIRMS_MAP_KEY")
+    if not api_key:
+        return jsonify({"error": "FIRMS_MAP_KEY not configured"}), 400
+
+    source = request.args.get("source")
+    west = request.args.get("west")
+    south = request.args.get("south")
+    east = request.args.get("east")
+    north = request.args.get("north")
+    days = request.args.get("days", "1")
+
+    if not all([source, west, south, east, north]):
+        return jsonify({"error": "Missing required query params"}), 400
+
+    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{west},{south},{east},{north}/{days}"
+    try:
+        resp = requests.get(url, timeout=20)
+    except requests.RequestException as exc:
+        return jsonify({"error": "FIRMS request failed", "details": str(exc)}), 502
+
+    if resp.status_code != 200:
+        return jsonify({"error": "FIRMS request failed", "status": resp.status_code, "details": resp.text[:500]}), 502
+
+    # Convert CSV to fire data with clean source name
+    source_name_map = {
+        'MODIS_NRT': 'MODIS Terra/Aqua',
+        'VIIRS_SNPP_NRT': 'VIIRS SNPP',
+        'VIIRS_NOAA20_NRT': 'VIIRS NOAA-20'
+    }
+    clean_source_name = source_name_map.get(source, source)
+    
+    fire_data = csv_to_fire_data(resp.text, clean_source_name)
+    
+    # Process and filter the data
+    processed_data = process_fire_data(fire_data)
+    
+    # Filter for India only
+    india_hotspots = filter_hotspots_for_india(processed_data)
+    
+    return jsonify({
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [point["longitude"], point["latitude"]]
+                },
+                "properties": point
+            }
+            for point in india_hotspots
+        ],
+        "metadata": {
+            "total_detections": len(fire_data),
+            "filtered_detections": len(processed_data),
+            "india_detections": len(india_hotspots),
+            "source": clean_source_name,
+            "date_range_days": days,
+            "filter": "India only"
+        }
+    })
+
 
 
 @app.get("/firms/wms")

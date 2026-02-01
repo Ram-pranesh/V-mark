@@ -16,7 +16,8 @@ const DRONE_DB = {
                 [77.2000, 11.4500], [77.0500, 11.4000], [76.9000, 11.5000],
                 [76.9500, 11.6000], [77.0000, 11.7000]
             ],
-            hotspots: { total: 12, severity: { high: 2, medium: 4, low: 6 } },
+            // Varied: 6 (was 12)
+            hotspots: { total: 6, severity: { high: 1, medium: 2, low: 3 } },
             docks: [{ id: "TN-SAT-HR", location: "Hasanur Range Office" }, { id: "TN-SAT-TC", location: "Talamalai Checkpost" }]
         },
         "tn_nilgiris": {
@@ -30,6 +31,7 @@ const DRONE_DB = {
                 [76.5000, 11.4000], [76.8000, 11.4000], [76.8500, 11.6000],
                 [76.7000, 11.6500], [76.5500, 11.6000], [76.5000, 11.4000]
             ],
+            // 5
             hotspots: { total: 5, severity: { high: 1, medium: 1, low: 3 } },
             docks: [{ id: "TN-NIL-MR", location: "Mudumalai Reception (Range)" }]
         },
@@ -45,7 +47,8 @@ const DRONE_DB = {
                 [76.5000, 11.5500], [76.3500, 11.5500], [76.2500, 11.6000],
                 [76.1500, 11.7000], [76.2000, 11.8000]
             ],
-            hotspots: { total: 8, severity: { high: 1, medium: 2, low: 5 } },
+            // 5
+            hotspots: { total: 5, severity: { high: 0, medium: 2, low: 3 } },
             docks: [{ id: "KA-BAN-GR", location: "Gundlupet Range Office" }]
         },
         "ka_virajpet": {
@@ -59,6 +62,7 @@ const DRONE_DB = {
                 [75.7000, 12.0000], [75.9500, 12.0000], [76.0000, 12.2000],
                 [75.8500, 12.3000], [75.6500, 12.1500], [75.7000, 12.0000]
             ],
+            // 4
             hotspots: { total: 4, severity: { high: 0, medium: 2, low: 2 } },
             docks: [{ id: "KA-VIR-TR", location: "Thithimathi Range" }]
         },
@@ -73,6 +77,7 @@ const DRONE_DB = {
                 [76.4000, 10.2000], [76.7000, 10.2000], [76.7500, 10.4500],
                 [76.5000, 10.5000], [76.3500, 10.3500], [76.4000, 10.2000]
             ],
+            // 6
             hotspots: { total: 6, severity: { high: 0, medium: 3, low: 3 } },
             docks: [{ id: "KL-VAZ-AR", location: "Athirapally Range Office" }]
         },
@@ -87,7 +92,8 @@ const DRONE_DB = {
                 [79.05, 16.60], [79.60, 16.60], [79.70, 16.10],
                 [79.40, 15.90], [79.10, 16.00], [79.05, 16.60]
             ],
-            hotspots: { total: 22, severity: { high: 8, medium: 8, low: 6 } },
+            // 6 
+            hotspots: { total: 6, severity: { high: 1, medium: 2, low: 3 } },
             docks: [{ id: "AP-NAG-MD", location: "Markapur Div. HQ" }]
         },
         "tg_amrabad": {
@@ -102,7 +108,8 @@ const DRONE_DB = {
                 [78.70, 15.80], [78.30, 15.80], [78.20, 16.00],
                 [78.40, 16.30]
             ],
-            hotspots: { total: 18, severity: { high: 5, medium: 7, low: 6 } },
+            // 4
+            hotspots: { total: 4, severity: { high: 0, medium: 2, low: 2 } },
             docks: [{ id: "TG-AMR-AR", location: "Achampet Range Office" }]
         },
 
@@ -119,6 +126,7 @@ const DRONE_DB = {
                 [79.3500, 20.1000], [79.2500, 20.1500], [79.1500, 20.2500],
                 [79.2000, 20.3500]
             ],
+            // 5
             hotspots: { total: 5, severity: { high: 0, medium: 2, low: 3 } },
             docks: [{ id: "MH-TAD-MR", location: "Moharli Range Office" }]
         },
@@ -134,7 +142,8 @@ const DRONE_DB = {
                 [80.8500, 22.1500], [80.6000, 22.1500], [80.4500, 22.2500],
                 [80.5000, 22.4500]
             ],
-            hotspots: { total: 15, severity: { high: 4, medium: 5, low: 6 } },
+            // 6
+            hotspots: { total: 6, severity: { high: 1, medium: 2, low: 3 } },
             docks: [{ id: "MP-KAN-MD", location: "Mandla Div. HQ" }]
         },
         "cg_indravati": {
@@ -149,7 +158,8 @@ const DRONE_DB = {
                 [80.55, 18.75], [80.30, 18.75], [80.15, 18.90],
                 [80.25, 19.10]
             ],
-            hotspots: { total: 24, severity: { high: 8, medium: 10, low: 6 } },
+            // 5
+            hotspots: { total: 5, severity: { high: 1, medium: 2, low: 2 } },
             docks: [{ id: "CG-IND-BD", location: "Bijapur Div. Office" }]
         },
         "gj_junagadh": {
@@ -163,7 +173,8 @@ const DRONE_DB = {
                 [70.7500, 21.0000], [71.1500, 21.0000], [71.2500, 21.2500],
                 [70.9000, 21.3500], [70.6500, 21.2000], [70.7500, 21.0000]
             ],
-            hotspots: { total: 11, severity: { high: 3, medium: 5, low: 3 } },
+            // 4
+            hotspots: { total: 4, severity: { high: 0, medium: 2, low: 2 } },
             docks: [{ id: "GJ-JUN-SR", location: "Sasan Range Office" }]
         },
         "rj_sawaimadhopur": {
@@ -178,7 +189,8 @@ const DRONE_DB = {
                 [76.5000, 26.2500], [76.2500, 26.1500], [76.2000, 26.0000],
                 [76.3000, 25.8500]
             ],
-            hotspots: { total: 9, severity: { high: 2, medium: 3, low: 4 } },
+            // 4 (was 9)
+            hotspots: { total: 4, severity: { high: 1, medium: 1, low: 2 } },
             docks: [{ id: "RJ-SWM-RR", location: "Ranthambore Road Office" }]
         },
 
@@ -195,7 +207,8 @@ const DRONE_DB = {
                 [86.5500, 21.7500], [86.3000, 21.7500], [86.1500, 21.9000],
                 [86.2000, 22.1000]
             ],
-            hotspots: { total: 18, severity: { high: 5, medium: 6, low: 7 } },
+            // 5
+            hotspots: { total: 5, severity: { high: 1, medium: 2, low: 2 } },
             docks: [{ id: "OR-SIM-BD", location: "Baripada Div. HQ" }]
         },
         "wb_24parganas": {
@@ -210,6 +223,7 @@ const DRONE_DB = {
                 [88.8500, 22.1500], [88.6000, 22.1000], [88.4000, 21.8000],
                 [88.5000, 21.5000]
             ],
+            // 2
             hotspots: { total: 2, severity: { high: 0, medium: 1, low: 1 } },
             docks: [{ id: "WB-24P-CR", location: "Canning Range Office" }]
         },
@@ -219,13 +233,13 @@ const DRONE_DB = {
             state: "Assam",
             terrain: "Grassland/Wetland",
             acres: "109,000",
-            center: [93.17, 26.58],
+            center: [93.35, 26.55],
             coordinates: [
-                [93.0500, 26.5000], [93.4000, 26.5000], [93.6000, 26.6500],
-                [93.6500, 26.8000], [93.3500, 26.8500], [93.1000, 26.7500],
-                [92.9500, 26.6000], [93.0500, 26.5000]
+                [93.1500, 26.4500], [93.5500, 26.4500], [93.6000, 26.6000],
+                [93.4500, 26.6800], [93.2500, 26.6500], [93.1500, 26.4500]
             ],
-            hotspots: { total: 4, severity: { high: 1, medium: 1, low: 2 } },
+            // 3 (was 4)
+            hotspots: { total: 3, severity: { high: 1, medium: 1, low: 1 } },
             docks: [{ id: "AS-GOL-BB", location: "Bokakhat Beat Office" }]
         },
         "ut_ramnagar": {
@@ -239,6 +253,7 @@ const DRONE_DB = {
                 [78.9000, 29.3000], [79.2500, 29.3000], [79.3500, 29.5500],
                 [79.1000, 29.6500], [78.8500, 29.5000], [78.9000, 29.3000]
             ],
+            // 3
             hotspots: { total: 3, severity: { high: 0, medium: 1, low: 2 } },
             docks: [{ id: "UT-RAM-RD", location: "Ramnagar Div. HQ" }]
         }
@@ -276,6 +291,7 @@ const generateHighFidelityDrones = () => {
             // Fixed number of drones per dock (5 drones)
             const droneCount = 5;
             const dockDrones = [];
+            let chargingCount = 0;
 
             for (let i = 1; i <= droneCount; i++) {
                 // New naming format: Full Dock ID + Sequential Number (e.g., TN-SAT-HR-01)
@@ -332,9 +348,13 @@ const generateHighFidelityDrones = () => {
                 const fireDetected = Math.random() > 0.85;
 
                 // --- STATE & VIDEO ---
-                // 40% Chance of Charging OR Hardcoded Request
-                let isCharging = Math.random() > 0.6;
-                if (droneId === 'TN-SAT-HR-03') isCharging = true; // User Request
+                // 40% Chance of Charging, but strictly capped at 2 per dock
+                let isCharging = false;
+                if (chargingCount < 2) {
+                    isCharging = Math.random() > 0.6;
+                    if (droneId === 'TN-SAT-HR-03') isCharging = true; // User Request override behavior
+                    if (isCharging) chargingCount++;
+                }
 
                 const status = isCharging ? "Charging" : (batt < 25 ? "Returning" : "Patrolling");
 
