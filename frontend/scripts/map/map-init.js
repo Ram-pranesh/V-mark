@@ -97,3 +97,97 @@ const map = new maplibregl.Map({
 
 // Expose map for split files and other scripts
 window.map = map;
+
+// --- User Provided "Pulsing Dot" Implementation ---
+const pulsingDotSize = 200;
+const pulsingDot = {
+  width: pulsingDotSize,
+  height: pulsingDotSize,
+  data: new Uint8Array(pulsingDotSize * pulsingDotSize * 4),
+
+  onAdd() {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.width;
+    canvas.height = this.height;
+    this.context = canvas.getContext('2d');
+  },
+
+  render() {
+    const duration = 1000;
+    const t = (performance.now() % duration) / duration;
+
+    const radius = (pulsingDotSize / 2) * 0.3;
+    const outerRadius = (pulsingDotSize / 2) * 0.7 * t + radius;
+    const context = this.context;
+
+    // draw outer circle
+    context.clearRect(0, 0, this.width, this.height);
+    context.beginPath();
+    context.arc(
+      this.width / 2,
+      this.height / 2,
+      outerRadius,
+      0,
+      Math.PI * 2
+    );
+    context.fillStyle = `rgba(255, 200, 200,${1 - t})`;
+    context.fill();
+
+    // draw inner circle
+    context.beginPath();
+    context.arc(
+      this.width / 2,
+      this.height / 2,
+      radius,
+      0,
+      Math.PI * 2
+    );
+    context.fillStyle = 'rgba(255, 100, 100, 1)';
+    context.strokeStyle = 'white';
+    context.lineWidth = 2 + 4 * (1 - t);
+    context.fill();
+    context.stroke();
+
+    this.data = context.getImageData(0, 0, this.width, this.height).data;
+    map.triggerRepaint();
+    return true;
+  }
+};
+
+map.on('load', () => {
+  map.addImage('pulsing-dot', pulsingDot, { pixelRatio: 2 });
+});
+
+// Helper to add a confirmed fire marker
+window.addConfirmedFireMarker = (lng, lat) => {
+  const id = `confirmed-fire-${Date.now()}`;
+
+  // Check if source exists, if not add it (allows multiple points if we manage data properly, 
+  // but here we'll just add a unique source/layer for each for simplicity in demo)
+  map.addSource(id, {
+    'type': 'geojson',
+    'data': {
+      'type': 'FeatureCollection',
+      'features': [{
+        'type': 'Feature',
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [lng, lat]
+        }
+      }]
+    }
+  });
+
+  map.addLayer({
+    'id': id,
+    'type': 'symbol',
+    'source': id,
+    'layout': {
+      'icon-image': 'pulsing-dot'
+    }
+  });
+
+  // Fly to it
+  map.flyTo({ center: [lng, lat], zoom: 14, pitch: 45 });
+};
+

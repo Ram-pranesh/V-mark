@@ -8,7 +8,8 @@
     "./scripts/map/map-time-controls.js",
     "./scripts/map/map-weather.js",
     "./scripts/map/map-coords.js",
-    "./scripts/map/map-extensions.js"
+    "./scripts/map/map-extensions.js",
+    "./scripts/map/map-alert.js"
   ];
 
   function loadScript(src) {

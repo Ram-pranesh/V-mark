@@ -126,7 +126,8 @@
           <span class="material-icons-round">settings_system_daydream</span> System
         </div>
 
-        <div class="layer-item" onclick="alert('Notification Alert System - No notifications')"
+        <div class="layer-item"
+          onclick="if(window.openAlertCenter) window.openAlertCenter(); else alert('Alert System Loading...');"
           style="padding: 10px 12px;">
           <span class="material-icons-round"
             style="margin-right:12px; font-size:22px; color:#ff6b35;">notifications_none</span>
