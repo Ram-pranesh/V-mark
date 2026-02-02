@@ -1,427 +1,767 @@
+/**
+ * MULTI-STAGE FIRE DETECTION ALERT CENTER
+ * Implements Stage 1 (Satellite), Stage 2 (Atmospheric), Stage 3 (Drone) verification
+ */
 
 (function () {
-    // ---------------------------------------------------------
-    // 1. DATA (Provided by User)
-    // ---------------------------------------------------------
-    const STAGE_2_CSV = `date,temperature_2m,wind_speed_10m,pm2_5,carbon_monoxide,carbon_dioxide,aerosol_optical_depth,nitrogen_dioxide,relative_humidity_2m,soil_moisture_0_to_1cm
-2026-01-27 00:00:00,18.78,6.85,72.6,385,470,1.01,4.1,67,0.29
-2026-01-27 12:00:00,27.38,8.67,56.8,285,452,1.23,2.5,51,0.28
-2026-01-28 00:00:00,18.23,10.50,57.5,372,467,0.67,4.5,71,0.29
-2026-01-28 12:00:00,24.18,6.99,39.2,243,449,0.43,2.1,49,0.28
-2026-01-29 00:00:00,14.23,3.10,52.2,373,463,0.49,3.8,84,0.29
-2026-01-29 12:00:00,23.48,8.94,56.9,304,448,0.73,2.2,62,0.28
-2026-01-30 00:00:00,15.28,1.14,44.0,386,459,0.78,5.5,88,0.29
-2026-01-30 12:00:00,26.98,5.50,48.9,326,451,0.89,1.5,49,0.28
-2026-01-31 00:00:00,19.03,0.80,48.0,405,486,1.20,12.6,72,0.29
-2026-01-31 16:00:00,21.28,3.24,78.0,517,487,1.32,16.7,76,0.29
-2026-01-31 23:00:00,20.23,0.80,60.8,338,473,1.08,13.7,74,0.29
-2026-02-01 06:00:00,25.98,8.91,36.3,279,455,0.80,3.3,46,0.28
-2026-02-01 16:00:00,22.68,3.32,48.9,392,477,0.49,19.2,68,0.28
-2026-02-01 22:00:00,20.98,0.80,49.7,349,485,0.47,16.5,69,0.28
-2026-02-01 23:00:00,20.68,1.14,48.4,345,487,0.48,15.6,69,0.28`;
+    console.log('Map-alert.js loaded successfully');
 
-    // Mock Satellite Confidence Trend (Last 5 Days) to satisfy Stage 1
-    // Day 5: 58, Day 4: 64, Day 3: 77, Day 2: 89, Today: 94
-    const ALERT_SAT_TREND = [
-        { day: 'Day -5', conf: 58 },
-        { day: 'Day -4', conf: 64 },
-        { day: 'Day -3', conf: 77 },
-        { day: 'Day -2', conf: 89 },
-        { day: 'Today', conf: 96 }
-    ];
+    let alertData = {
+        stage1_count: 0,
+        stage2_count: 0,
+        stage3_count: 0,
+        stage1_locations: [],
+        stage2_locations: [],
+        stage3_locations: [],
+        docking_stations_available: false
+    };
 
-    // Helper to parse CSV
-    function parseCSV(csv) {
-        const lines = csv.split('\n');
-        const headers = lines[0].split(',');
-        return lines.slice(1).map(line => {
-            const values = line.split(',');
-            const obj = {};
-            headers.forEach((h, i) => obj[h.trim()] = values[i]);
-            return obj;
-        });
-    }
+    let currentView = null; // 'stage1', 'stage2', 'stage3', or null
 
-    const stage2Data = parseCSV(STAGE_2_CSV);
+    /**
+     * Open Alert Center Modal
+     */
+    window.openAlertCenter = async function () {
+        console.log('Alert Center opened!');
 
-    // ---------------------------------------------------------
-    // 2. ALERT CENTER LOGIC
-    // ---------------------------------------------------------
+        // Fetch multi-stage analysis data
+        await fetchMultiStageData();
 
-    window.openAlertCenter = function (coordinates = null) {
-        // Default coords if none provided (mock location)
-        if (!coordinates) coordinates = { lat: 20.5937, lng: 78.9629 };
-
-        // Create Modal
+        // Create modal
         let modal = document.getElementById('alert-center-modal');
-        if (modal) modal.remove(); // Re-create to reset state
+        if (modal) modal.remove();
 
         modal = document.createElement('div');
         modal.id = 'alert-center-modal';
-        // Larger than stats window (approx 900px maybe?)
         modal.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 90vw; max-width: 1100px; height: 85vh;
-            background: rgba(10, 12, 16, 0.98); backdrop-filter: blur(15px);
-            border: 1px solid #333; border-radius: 12px;
-            color: #fff; z-index: 10000; display: flex; flex-direction: column;
-            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            position: fixed; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            width: 700px; 
+            max-height: 600px;
+            background: rgba(10, 12, 16, 0.98); 
+            backdrop-filter: blur(15px);
+            border: 1px solid #444; 
+            border-radius: 12px;
+            color: #fff; 
+            z-index: 10000; 
+            display: flex; 
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.8);
             font-family: 'Segoe UI', sans-serif;
         `;
 
-        // Store initial map state to restore later
-        const initialMapState = {
-            center: window.map ? window.map.getCenter() : null,
-            zoom: window.map ? window.map.getZoom() : null,
-            pitch: window.map ? window.map.getPitch() : null,
-            bearing: window.map ? window.map.getBearing() : null
-        };
+        modal.innerHTML = createAlertCenterHTML();
+        document.body.appendChild(modal);
 
-        const closeAlertCenter = () => {
-            const modal = document.getElementById('alert-center-modal');
-            if (modal) modal.remove();
+        // Bind events
+        document.getElementById('alert-close-btn').addEventListener('click', closeAlertCenter);
+        bindStageClickEvents();
+    };
 
-            // Restore map state
-            if (window.map && initialMapState.center) {
-                window.map.flyTo({
-                    center: initialMapState.center,
-                    zoom: initialMapState.zoom,
-                    pitch: initialMapState.pitch,
-                    bearing: initialMapState.bearing,
-                    duration: 1500
-                });
+    /**
+     * Fetch multi-stage analysis from existing map data
+     * OPTIMIZED: Uses data already loaded on the map
+     */
+    async function fetchMultiStageData() {
+        try {
+            // Show minimalistic spinner
+            const spinner = document.createElement('div');
+            spinner.id = 'alert-loading';
+            spinner.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                z-index: 10001;
+            `;
+            spinner.innerHTML = `
+                <div style="width: 50px; height: 50px; border: 3px solid #333; border-top: 3px solid #FF8C00; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+            document.body.appendChild(spinner);
+
+            // Get existing fire data from the map
+            const fireSource = window.map.getSource('fire-source');
+            let stage1_locations = [];
+            let stage2_locations = [];
+
+            if (fireSource) {
+                const fireData = fireSource._data;
+
+                if (fireData && fireData.features) {
+                    // Analyze existing hotspots
+                    fireData.features.forEach(feature => {
+                        const props = feature.properties;
+                        const coords = feature.geometry.coordinates;
+
+                        // Check if it's Stage 1 (confidence >= 90% and orange color)
+                        if (props.severity_label === 'Stage 1' ||
+                            (props.confidence_normalized >= 90 && props.display_color === '#FF8C00')) {
+
+                            stage1_locations.push({
+                                latitude: coords[1],
+                                longitude: coords[0],
+                                confidence: props.confidence_normalized || props.confidence,
+                                trend: [props.confidence_normalized || props.confidence],
+                                slope: 0,
+                                hotspot_count: 1,
+                                daily_stats: [{
+                                    date: props.acq_date,
+                                    avg_confidence: props.confidence_normalized || props.confidence,
+                                    avg_frp: props.frp,
+                                    avg_brightness: props.brightness
+                                }],
+                                stage: 1,
+                                status: 'STAGE_1_CONFIRMED',
+                                color: '#FF8C00'
+                            });
+                        }
+                    });
+                }
             }
-        };
 
-        // -----------------------
-        // HEADER
-        // -----------------------
-        const header = `
-            <div style="padding: 15px 25px; border-bottom: 1px solid #333; display:flex; justify-content:space-between; align-items:center; background: rgba(255,107,53,0.1);">
-                <div style="display:flex; align-items:center; gap:12px;">
-                     <span class="material-icons-round" style="color:#ff6b35; font-size:28px;">warning</span>
-                     <div>
-                        <h2 style="margin:0; font-size:20px; color:#ff6b35;">FIRE ALERT CENTER</h2>
-                        <span style="font-size:12px; color:#aaa; font-family:monospace;">ID: FIRE-2026-XJ9 • LOC: ${coordinates.lat.toFixed(4)}, ${coordinates.lng.toFixed(4)}</span>
-                     </div>
+            alertData = {
+                stage1_count: stage1_locations.length,
+                stage2_count: stage2_locations.length,
+                stage3_count: 0,
+                stage1_locations: stage1_locations,
+                stage2_locations: stage2_locations,
+                stage3_locations: [],
+                docking_stations_available: false
+            };
+
+            // Remove spinner
+            spinner.remove();
+
+            console.log('Alert data loaded from map:', alertData);
+
+        } catch (error) {
+            console.error('Error fetching multi-stage data:', error);
+            const spinner = document.getElementById('alert-loading');
+            if (spinner) spinner.remove();
+        }
+    }
+
+    /**
+     * Create Alert Center HTML
+     */
+    function createAlertCenterHTML() {
+        return `
+            ${createHeader()}
+            ${createRoadmap()}
+            ${createContentArea()}
+        `;
+    }
+
+    /**
+     * Header
+     */
+    function createHeader() {
+        return `
+            <div style="padding: 12px 20px; border-bottom: 1px solid #333; display:flex; justify-content:space-between; align-items:center; background: rgba(255,107,53,0.1);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    
+                    <div>
+                        <h2 style="margin:0; font-size:16px; color:#ff6b35;">FIRE ALERT</h2>
+                        <span style="font-size:11px; color:#aaa; font-family:monospace;">Multi-Stage Verification</span>
+                    </div>
                 </div>
                 <button id="alert-close-btn" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">&times;</button>
             </div>
         `;
+    }
 
-        // -----------------------
-        // ROADMAP VISUALIZATION
-        // -----------------------
-        // Fix: Use a container for the line track so 'width: 100%' refers to the track length, not the window.
-        // Margins: 50px (padding) + 75px (half node width) = 125px.
-        const roadmap = `
-            <div style="padding: 30px 50px; display:flex; justify-content:center; position:relative; overflow:hidden;">
+    /**
+     * Roadmap with Stage Counts
+     */
+    function createRoadmap() {
+        const stage1Color = alertData.stage1_count > 0 ? '#FF8C00' : '#555';
+        const stage2Color = alertData.stage2_count > 0 ? '#4169E1' : '#555';
+        const stage3Color = alertData.stage3_count > 0 ? '#DC143C' : '#555';
+
+        return `
+            <div style="padding: 20px 30px; display:flex; justify-content:space-around; align-items:flex-start; position:relative;">
                 
-                <!-- Track Container -->
-                <div style="position:absolute; top:52px; left:125px; right:125px; height:3px; z-index:0;">
-                    <!-- Grey Background -->
-                    <div style="position:absolute; top:0; left:0; width:100%; height:100%; background:#333;"></div>
-                    <!-- Orange Fill -->
-                    <div id="roadmap-line-fill" style="position:absolute; top:0; left:0; width:0%; height:100%; background:#ff6b35; transition:width 1s ease-out;"></div>
+                <!-- Progress Line -->
+                <div style="position:absolute; top:50px; left:20%; right:20%; height:2px; background:#333; z-index:0;">
+                    <div style="position:absolute; top:0; left:0; height:100%; background:${stage1Color}; width:${alertData.stage1_count > 0 ? (alertData.stage2_count > 0 ? '100%' : '50%') : '0%'}; transition:width 1s;"></div>
                 </div>
-                
-                <!-- Stage 1 -->
-                <div id="stage-1-node" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:10px; width:150px;">
-                    <div style="width:40px; height:40px; border-radius:50%; background:#1a1a1a; border:2px solid #555; display:flex; align-items:center; justify-content:center; transition:all 0.5s;">
-                        <span class="material-icons-round" style="font-size:24px; color:#555;">satellite_alt</span>
+
+                <!-- Stage 1: Satellite -->
+                <div id="stage-1-card" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; width:150px; cursor:pointer; transition:transform 0.3s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    <div style="width:45px; height:45px; border-radius:50%; background:#1a1a1a; border:2px solid ${stage1Color}; display:flex; align-items:center; justify-content:center; box-shadow:0 0 15px ${stage1Color};">
+                        <span class="material-icons-round" style="font-size:24px; color:${stage1Color};">satellite_alt</span>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-weight:700; font-size:14px; color:#888;">Satellite Confirmation</div>
-                        <div id="stage-1-status" style="font-size:11px; color:#666;">Pending</div>
-                    </div>
-                </div>
-                
-                <!-- Spacer -->
-                <div style="flex:1;"></div>
-
-                <!-- Stage 2 -->
-                <div id="stage-2-node" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:10px; width:150px;">
-                    <div style="width:40px; height:40px; border-radius:50%; background:#1a1a1a; border:2px solid #555; display:flex; align-items:center; justify-content:center; transition:all 0.5s;">
-                        <span class="material-icons-round" style="font-size:24px; color:#555;">air</span>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-weight:700; font-size:14px; color:#888;">Atmospheric Verification</div>
-                        <div id="stage-2-status" style="font-size:11px; color:#666;">Waiting</div>
+                        <div style="font-weight:700; font-size:12px; color:#ddd;">Stage 1</div>
+                        <div style="font-size:10px; color:#888;">Satellite</div>
+                        <div style="font-size:20px; font-weight:bold; color:${stage1Color}; margin-top:4px;">${alertData.stage1_count}</div>
+                        <div style="font-size:9px; color:#666;">Confirmed</div>
                     </div>
                 </div>
 
-                <!-- Spacer -->
-                <div style="flex:1;"></div>
-
-                <!-- Stage 3 -->
-                <div id="stage-3-node" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:10px; width:150px;">
-                    <div style="width:40px; height:40px; border-radius:50%; background:#1a1a1a; border:2px solid #555; display:flex; align-items:center; justify-content:center; transition:all 0.5s;">
-                        <span class="material-icons-round" style="font-size:24px; color:#555;">flight_takeoff</span>
+                <!-- Stage 2: Atmospheric -->
+                <div id="stage-2-card" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; width:150px; cursor:pointer; transition:transform 0.3s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    <div style="width:45px; height:45px; border-radius:50%; background:#1a1a1a; border:2px solid ${stage2Color}; display:flex; align-items:center; justify-content:center; box-shadow:0 0 15px ${stage2Color};">
+                        <span class="material-icons-round" style="font-size:24px; color:${stage2Color};">air</span>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-weight:700; font-size:14px; color:#888;">Drone Confirmation</div>
-                        <div id="stage-3-status" style="font-size:11px; color:#666;">Waiting</div>
+                        <div style="font-weight:700; font-size:12px; color:#ddd;">Stage 2</div>
+                        <div style="font-size:10px; color:#888;">Atmospheric</div>
+                        <div style="font-size:20px; font-weight:bold; color:${stage2Color}; margin-top:4px;">${alertData.stage2_count}</div>
+                        <div style="font-size:9px; color:#666;">Confirmed</div>
+                    </div>
+                </div>
+
+                <!-- Stage 3: Drone -->
+                <div id="stage-3-card" style="z-index:1; display:flex; flex-direction:column; align-items:center; gap:6px; width:150px; cursor:${alertData.docking_stations_available ? 'pointer' : 'not-allowed'}; transition:transform 0.3s; opacity:${alertData.docking_stations_available ? '1' : '0.5'};" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    <div style="width:45px; height:45px; border-radius:50%; background:#1a1a1a; border:2px solid ${stage3Color}; display:flex; align-items:center; justify-content:center; box-shadow:0 0 15px ${stage3Color};">
+                        <span class="material-icons-round" style="font-size:24px; color:${stage3Color};">flight_takeoff</span>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-weight:700; font-size:12px; color:#ddd;">Stage 3</div>
+                        <div style="font-size:10px; color:#888;">Drone</div>
+                        ${alertData.docking_stations_available ? `
+                            <div style="font-size:20px; font-weight:bold; color:${stage3Color}; margin-top:4px;">${alertData.stage3_count}</div>
+                            <div style="font-size:9px; color:#666;">Confirmed</div>
+                        ` : `
+                            <div style="font-size:9px; color:#ff6b35; margin-top:6px; padding:4px 8px; background:rgba(255,107,53,0.1); border-radius:3px; border:1px solid #ff6b35;">No Stations</div>
+                        `}
                     </div>
                 </div>
             </div>
         `;
+    }
 
-        // -----------------------
-        // MAIN CONTENT AREA
-        // -----------------------
-        const content = `
-            <div id="alert-content-area" style="flex:1; padding:20px 25px; display:grid; grid-template-columns: 1fr 1fr; gap:20px; overflow-y:auto;">
-                <!-- Left Panel: Details -->
-                <div style="background:#151515; border-radius:8px; padding:20px; border:1px solid #333;">
-                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Analysis Feed</h3>
-                    <div id="analysis-log" style="font-family:monospace; font-size:12px; color:#aaa; height:200px; overflow-y:auto; margin-bottom:20px; background:#000; padding:10px; border-radius:4px;">
-                        > System Initialized.<br>
-                        > Waiting for verification trigger...
-                    </div>
-                    
-                    <div id="action-area">
-                        <button id="btn-start-verify" style="width:100%; padding:12px; background:#ff6b35; border:none; border-radius:6px; color:#fff; font-weight:bold; cursor:pointer; font-size:14px;">INITIATE VERIFICATION SEQUENCE</button>
-                    </div>
-                </div>
-
-                <!-- Right Panel: Visuals -->
-                <div id="visual-panel" style="background:#151515; border-radius:8px; padding:20px; border:1px solid #333; display:flex; flex-direction:column; gap:15px;">
-                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Visual Data</h3>
-                    
-                    <!-- Charts Placeholder -->
-                    <div id="chart-container" style="flex:1; min-height:200px; display:flex; align-items:center; justify-content:center; color:#555; background:#0a0a0a; border-radius:6px; border:1px dashed #333;">
-                        <span>No Data Available</span>
-                    </div>
+    /**
+     * Content Area
+     */
+    function createContentArea() {
+        return `
+            <div id="alert-content-area" style="flex:1; padding:20px 25px; overflow-y:auto;">
+                <div id="content-display" style="color:#aaa; text-align:center; padding:40px;">
+                    <span class="material-icons-round" style="font-size:64px; color:#555;">touch_app</span>
+                    <p style="margin-top:20px; font-size:16px;">Click on a stage above to view confirmed locations</p>
                 </div>
             </div>
         `;
+    }
 
-        modal.innerHTML = header + roadmap + content;
-        document.body.appendChild(modal);
+    /**
+     * Bind Stage Click Events
+     */
+    function bindStageClickEvents() {
+        document.getElementById('stage-1-card').addEventListener('click', () => showStageDetails(1));
+        document.getElementById('stage-2-card').addEventListener('click', () => showStageDetails(2));
+        if (alertData.docking_stations_available) {
+            document.getElementById('stage-3-card').addEventListener('click', () => showStageDetails(3));
+        }
+    }
 
-        // Bind Close Event
-        document.getElementById('alert-close-btn').addEventListener('click', closeAlertCenter);
+    /**
+     * Show Stage Details
+     */
+    async function showStageDetails(stage) {
+        currentView = `stage${stage}`;
+        const contentArea = document.getElementById('content-display');
 
-        // -----------------------
-        // LOGIC & ANIMATION
-        // -----------------------
-        const logBox = document.getElementById('analysis-log');
-        const log = (msg) => {
-            logBox.innerHTML += `> ${msg}<br>`;
-            logBox.scrollTop = logBox.scrollHeight;
+        if (stage === 1) {
+            contentArea.innerHTML = await createStage1View();
+        } else if (stage === 2) {
+            contentArea.innerHTML = await createStage2View();
+        } else if (stage === 3) {
+            contentArea.innerHTML = createStage3View();
+        }
+
+        // Bind location click events
+        bindLocationEvents(stage);
+    }
+
+    /**
+     * Create Stage 1 View (Satellite Confirmations)
+     */
+    async function createStage1View(loadMore = false) {
+        if (alertData.stage1_locations.length === 0) {
+            return `
+                <div style="text-align:center; padding:40px; color:#888;">
+                    <span class="material-icons-round" style="font-size:48px;">info</span>
+                    <p style="margin-top:15px;">No Stage 1 confirmations found</p>
+                </div>
+            `;
+        }
+
+        // Pagination State
+        if (!loadMore) {
+            window.stage1_visible_count = 5;
+        } else {
+            window.stage1_visible_count = (window.stage1_visible_count || 5) + 5;
+        }
+
+        const visibleItems = alertData.stage1_locations.slice(0, window.stage1_visible_count);
+        const hasMore = alertData.stage1_locations.length > window.stage1_visible_count;
+
+        let html = `
+            <h3 style="margin-top:0; color:#FF8C00; border-bottom:2px solid #FF8C00; padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span class="material-icons-round" style="vertical-align:middle;">satellite_alt</span>
+                    Stage 1 Confirmed Locations 
+                    <span style="font-size:12px; color:#888; font-weight:normal; margin-left:5px;">(${alertData.stage1_locations.length} total)</span>
+                </div>
+            </h3>
+            <div id="stage1-list" style="display:grid; gap:10px; margin-top:15px;">
+        `;
+
+        for (const location of visibleItems) {
+            const locationName = await getLocationName(location.latitude, location.longitude);
+
+            html += `
+                <div class="location-card" data-stage="1" style="background:#151515; border:2px solid #FF8C00; border-radius:8px; padding:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='#151515'">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <div style="flex:1;">
+                            <div style="font-size:16px; font-weight:bold; color:#FF8C00; margin-bottom:5px;">${locationName}</div>
+                            <div style="font-size:12px; color:#888; font-family:monospace;">
+                                ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°
+                            </div>
+                            <div style="margin-top:10px; font-size:13px; color:#aaa;">
+                                <strong>Confidence:</strong> ${location.confidence.toFixed(1)}%<br>
+                                <strong>Hotspots:</strong> ${location.hotspot_count || 1} detections
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <button class="info-btn" data-location='${JSON.stringify(location)}' style="padding:8px 12px; background:#333; border:1px solid #555; border-radius:4px; color:#fff; cursor:pointer; font-size:12px; white-space:nowrap; display:flex; align-items:center; gap:5px;">
+                                <span class="material-icons-round" style="font-size:14px;">info</span> Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+
+        if (hasMore) {
+            html += `
+                <div style="text-align:center; margin-top:20px;">
+                    <button id="load-more-btn" style="padding:8px 20px; background:#222; border:1px solid #444; color:#ddd; border-radius:20px; cursor:pointer; font-size:12px;">
+                        Load More (${alertData.stage1_locations.length - window.stage1_visible_count} remaining)
+                    </button>
+                </div>
+            `;
+        }
+
+        return html;
+    }
+
+    // Hook for load more
+    document.addEventListener('click', async (e) => {
+        if (e.target.id === 'load-more-btn') {
+            const contentArea = document.getElementById('content-display');
+            contentArea.innerHTML = await createStage1View(true);
+            // Re-bind not needed as we use event delegation or global listeners, 
+            // but if we used specific bindings we would need to re-bind.
+            // The Info button listener is global (see below).
+        }
+    });
+
+    /**
+     * Show Hotspot Info Window (Details + Stats On Demand)
+     */
+    async function showHotspotInfo(location) {
+        // Show loading overlay
+        const loadingModal = document.createElement('div');
+        loadingModal.id = 'info-loading';
+        loadingModal.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 10003; color: #FF8C00; font-size: 20px; font-weight: bold;
+            display: flex; align-items: center; gap: 10px; text-shadow: 0 2px 4px black;
+         `;
+        loadingModal.innerHTML = `<span class="material-icons-round" style="animation:spin 1s infinite;">refresh</span> Loading Info...`;
+        document.body.appendChild(loadingModal);
+
+        const locationName = await getLocationName(location.latitude, location.longitude);
+
+        if (document.getElementById('info-loading')) document.getElementById('info-loading').remove();
+
+        const infoModal = document.createElement('div');
+        infoModal.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 800px; height: 600px; background: #0a0a0a; border: 2px solid #FF8C00;
+            border-radius: 12px; z-index: 10002; padding: 0; color: #fff;
+            display: flex; flex-direction: column; overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            font-family: 'Segoe UI', sans-serif;
+         `;
+
+        // Format Source
+        let sourceName = location.source || 'Satellite';
+        if (sourceName.includes('MODIS')) sourceName = 'MODIS (Terra/Aqua)';
+        if (sourceName.includes('SNPP')) sourceName = 'VIIRS SNPP';
+        if (sourceName.includes('NOAA20') || sourceName.includes('NOAA-20')) sourceName = 'VIIRS NOAA-20';
+
+        // Format Intensity (Brightness)
+        let intensity = 'N/A';
+        const bright = location.brightness || location.avg_brightness || location.brightness_2;
+        if (bright) intensity = parseFloat(bright).toFixed(1) + ' K';
+
+        infoModal.innerHTML = `
+            <div style="padding:15px 20px; background:#111; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                     <h2 style="margin:0; font-size:18px; color:#FF8C00;">${locationName}</h2>
+                     <div style="font-family:monospace; color:#888; font-size:12px;">${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}</div>
+                </div>
+                <button id="close-info-btn" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
+            <div style="flex:1; padding:20px; overflow-y:auto;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+                    <div style="background:#151515; padding:15px; border-radius:8px;">
+                        <h4 style="margin:0 0 10px 0; color:#888; border-bottom:1px solid #333; padding-bottom:5px;">Details (Stage 1)</h4>
+                        <div style="margin-bottom:8px;"><strong>Intensity:</strong> ${intensity}</div>
+                        <div style="margin-bottom:8px;"><strong>Confidence:</strong> ${location.confidence ? location.confidence.toFixed(1) : 0}%</div>
+                        <div style="margin-bottom:8px;"><strong>Source:</strong> ${sourceName}</div>
+                        <div><strong>Date:</strong> ${location.acq_date || 'Today'}</div>
+                    </div>
+                    <div style="background:#151515; padding:15px; border-radius:8px; display:flex; flex-direction:column; justify-content:center; gap:10px;">
+                        <button id="view-path-btn" style="padding:10px; background:#4169E1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:5px;">
+                            <span class="material-icons-round">map</span> View Path on Map
+                        </button>
+                        <button id="view-stats-btn" style="padding:10px; background:#222; border:1px solid #444; border-radius:6px; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                            <span class="material-icons-round">bar_chart</span> View 5-Day Stats
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="stats-container" style="display:none; height:300px; background:#151515; border-radius:8px; padding:10px;">
+                    <canvas id="stats-chart"></canvas>
+                </div>
+            </div>
+         `;
+
+        document.body.appendChild(infoModal);
+
+        // Events
+        document.getElementById('close-info-btn').onclick = () => infoModal.remove();
+
+        document.getElementById('view-path-btn').onclick = () => {
+            infoModal.remove();
+            closeAlertCenter();
+            flyToLocation(location.latitude, location.longitude);
         };
 
-        const updateNode = (stage, status, color = '#ff6b35') => {
-            const node = document.getElementById(`stage-${stage}-node`);
-            const circle = node.children[0];
-            const text = node.children[1].children[0];
-            const sub = document.getElementById(`stage-${stage}-status`);
+        document.getElementById('view-stats-btn').onclick = async function () {
+            const btn = this;
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<span class="material-icons-round" style="animation:spin 1s infinite; font-size:16px;">refresh</span> Loading Stats...`;
+            btn.disabled = true;
 
-            if (status === 'active') {
-                circle.style.borderColor = '#fff';
-                circle.style.boxShadow = '0 0 15px rgba(255,255,255,0.3)';
-                circle.children[0].style.color = '#fff';
-                sub.innerText = "Analyzing...";
-                sub.style.color = "#fff";
-            } else if (status === 'confirmed') {
-                circle.style.backgroundColor = color;
-                circle.style.borderColor = color;
-                circle.style.boxShadow = `0 0 20px ${color}`;
-                circle.children[0].style.color = '#fff'; // Icon White
-                text.style.color = '#fff';
-                sub.innerText = "VERIFIED";
-                sub.style.color = color;
+            // Call API for deep analysis
+            try {
+                const response = await fetch(`/api/analyze-hotspot?lat=${location.latitude}&lon=${location.longitude}`);
+                if (response.ok) {
+                    const result = await response.json();
+                    const stats = result.stage1_result?.daily_stats || [];
 
-                // Update Line
-                const line = document.getElementById('roadmap-line-fill');
-                if (stage === 1) line.style.width = '50%';
-                if (stage === 2) line.style.width = '100%';
+                    document.getElementById('stats-container').style.display = 'block';
+                    const ctx = document.getElementById('stats-chart').getContext('2d');
+
+                    // Sort by date
+                    stats.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: stats.map(s => s.date),
+                            datasets: [{
+                                label: 'Confidence %',
+                                data: stats.map(s => s.avg_confidence),
+                                borderColor: '#FF8C00',
+                                backgroundColor: 'rgba(255,140,0,0.2)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { labels: { color: '#fff' } } },
+                            scales: {
+                                y: { min: 0, max: 100, grid: { color: '#333' }, ticks: { color: '#fff' } },
+                                x: { grid: { color: '#333' }, ticks: { color: '#fff' } }
+                            }
+                        }
+                    });
+
+                    btn.innerHTML = `<span class="material-icons-round">check_circle</span> Stats Loaded`;
+                    btn.style.background = '#FF8C00';
+                    btn.style.borderColor = '#FF8C00';
+                } else {
+                    const err = await response.json();
+                    console.error(err);
+                    btn.innerHTML = 'Stats Failed';
+                    setTimeout(() => { btn.innerHTML = originalContent; btn.disabled = false; }, 2000);
+                }
+            } catch (e) {
+                console.error(e);
+                btn.innerHTML = 'Error';
+                setTimeout(() => { btn.innerHTML = originalContent; btn.disabled = false; }, 2000);
             }
         };
+    }
 
-        const drawStage1Chart = () => {
-            const ctxContainer = document.getElementById('chart-container');
-            ctxContainer.innerHTML = '<canvas id="stage1-chart"></canvas>';
-            const ctx = document.getElementById('stage1-chart').getContext('2d');
+    // Add click handler for Info button
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.info-btn');
+        if (btn) {
+            e.stopPropagation();
+            const location = JSON.parse(btn.dataset.location);
+            showHotspotInfo(location);
+        }
+    });
 
+    /**
+     * Create Stage 2 View (Atmospheric Confirmations)
+     */
+    async function createStage2View() {
+        if (alertData.stage2_locations.length === 0) {
+            return `
+                <div style="text-align:center; padding:40px; color:#888;">
+                    <span class="material-icons-round" style="font-size:48px;">info</span>
+                    <p style="margin-top:15px;">No Stage 2 confirmations found</p>
+                </div>
+            `;
+        }
+
+        let html = `
+            <h3 style="margin-top:0; color:#4169E1; border-bottom:2px solid #4169E1; padding-bottom:10px;">
+                <span class="material-icons-round" style="vertical-align:middle;">air</span>
+                Stage 2 Confirmed Locations (${alertData.stage2_locations.length})
+            </h3>
+            <div style="display:grid; gap:15px; margin-top:20px;">
+        `;
+
+        for (const location of alertData.stage2_locations) {
+            const locationName = await getLocationName(location.latitude, location.longitude);
+
+            html += `
+                <div class="location-card" data-stage="2" data-lat="${location.latitude}" data-lon="${location.longitude}" style="background:#151515; border:2px solid #4169E1; border-radius:8px; padding:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='#151515'">
+                    <div style="display:flex; justify-content:space-between; align-items:start;">
+                        <div style="flex:1;">
+                            <div style="font-size:16px; font-weight:bold; color:#4169E1; margin-bottom:5px;">${locationName}</div>
+                            <div style="font-size:12px; color:#888; font-family:monospace;">
+                                ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°
+                            </div>
+                            <div style="margin-top:10px; font-size:13px; color:#aaa;">
+                                <strong>Confidence:</strong> ${location.confidence.toFixed(1)}%<br>
+                                <strong>Atmospheric Spikes:</strong> ${location.spike_indicators} indicators<br>
+                                <strong>Status:</strong> Verified
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <button class="view-stats-btn" data-lat="${location.latitude}" data-lon="${location.longitude}" style="padding:8px 12px; background:#4169E1; border:none; border-radius:4px; color:#fff; cursor:pointer; font-size:12px; white-space:nowrap;">
+                                <span class="material-icons-round" style="font-size:14px; vertical-align:middle;">analytics</span> View Stats
+                            </button>
+                            <button class="view-graph-btn" data-location='${JSON.stringify(location)}' style="padding:8px 12px; background:#FF8C00; border:none; border-radius:4px; color:#fff; cursor:pointer; font-size:12px; white-space:nowrap;">
+                                <span class="material-icons-round" style="font-size:14px; vertical-align:middle;">show_chart</span> View Graph
+                            </button>
+                            <button class="goto-location-btn" data-lat="${location.latitude}" data-lon="${location.longitude}" style="padding:8px 12px; background:#10b981; border:none; border-radius:4px; color:#fff; cursor:pointer; font-size:12px; white-space:nowrap;">
+                                <span class="material-icons-round" style="font-size:14px; vertical-align:middle;">place</span> Go To
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        return html;
+    }
+
+    /**
+     * Create Stage 3 View
+     */
+    function createStage3View() {
+        return `
+            <div style="text-align:center; padding:40px; color:#888;">
+                <span class="material-icons-round" style="font-size:48px; color:#DC143C;">flight_takeoff</span>
+                <p style="margin-top:15px; font-size:16px;">Stage 3: Drone Confirmation</p>
+                <p style="color:#666;">No docking stations available in satellite telemetry mode</p>
+            </div>
+        `;
+    }
+
+    /**
+     * Bind Location Events (View Graph, Go To, View Stats)
+     */
+    function bindLocationEvents(stage) {
+        // View Graph buttons
+        document.querySelectorAll('.view-graph-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const location = JSON.parse(btn.dataset.location);
+                showTrendGraph(location, stage);
+            });
+        });
+
+        // Go To buttons
+        document.querySelectorAll('.goto-location-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const lat = parseFloat(btn.dataset.lat);
+                const lon = parseFloat(btn.dataset.lon);
+                flyToLocation(lat, lon);
+            });
+        });
+
+        // View Stats buttons (Stage 2 only)
+        document.querySelectorAll('.view-stats-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const lat = parseFloat(btn.dataset.lat);
+                const lon = parseFloat(btn.dataset.lon);
+                if (window.showWeatherStats) {
+                    closeAlertCenter();
+                    window.showWeatherStats(lat, lon);
+                }
+            });
+        });
+    }
+
+    /**
+     * Show 5-day Trend Graph
+     */
+    function showTrendGraph(location, stage) {
+        const graphModal = document.createElement('div');
+        graphModal.id = 'trend-graph-modal';
+        graphModal.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 600px; height: 450px; background: #0a0a0a; border: 2px solid ${stage === 1 ? '#FF8C00' : '#4169E1'};
+            border-radius: 12px; z-index: 10001; padding: 20px; color: #fff;
+        `;
+
+        graphModal.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; color:${stage === 1 ? '#FF8C00' : '#4169E1'};">5-Day Trend Analysis</h3>
+                <button id="close-graph-btn" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
+            <canvas id="trend-chart" style="width:100%; height:350px;"></canvas>
+        `;
+
+        document.body.appendChild(graphModal);
+
+        document.getElementById('close-graph-btn').addEventListener('click', () => graphModal.remove());
+
+        // Draw chart
+        const ctx = document.getElementById('trend-chart').getContext('2d');
+
+        if (stage === 1) {
+            // Confidence trend chart
             new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: ALERT_SAT_TREND.map(d => d.day),
+                    labels: location.daily_stats.map((d, i) => `Day ${i + 1}`),
                     datasets: [{
-                        label: 'Satellite Confidence (%)',
-                        data: ALERT_SAT_TREND.map(d => d.conf),
-                        borderColor: '#ff6b35',
-                        backgroundColor: 'rgba(255, 107, 53, 0.2)',
+                        label: 'Confidence (%)',
+                        data: location.daily_stats.map(d => d.avg_confidence),
+                        borderColor: '#FF8C00',
+                        backgroundColor: 'rgba(255, 140, 0, 0.2)',
                         fill: true,
-                        tension: 0.3
+                        tension: 0.4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { min: 0, max: 100, grid: { color: '#333' } }, x: { grid: { color: '#333' } } }
+                    plugins: { legend: { labels: { color: '#fff' } } },
+                    scales: {
+                        y: { min: 0, max: 100, grid: { color: '#333' }, ticks: { color: '#fff' } },
+                        x: { grid: { color: '#333' }, ticks: { color: '#fff' } }
+                    }
                 }
             });
-        };
-
-        const drawStage2Chart = () => {
-            const ctxContainer = document.getElementById('chart-container');
-            ctxContainer.innerHTML = '<canvas id="stage2-chart"></canvas>';
-            const ctx = document.getElementById('stage2-chart').getContext('2d');
-
-            // Extract recent data for chart
-            const labels = stage2Data.slice(-10).map(d => d.date.split(' ')[1].substr(0, 5));
-            const coData = stage2Data.slice(-10).map(d => parseFloat(d.carbon_monoxide));
-
+        } else if (stage === 2) {
+            // Multi-variable chart for Stage 2
             new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'CO Levels (μg/m³)',
-                        data: coData,
-                        backgroundColor: coData.map(v => v > 400 ? '#ff6b35' : '#4aa8ff'),
-                    }]
+                    labels: location.daily_stats.map((d, i) => `Day ${i + 1}`),
+                    datasets: [
+                        {
+                            label: 'Confidence (%)',
+                            data: location.daily_stats.map(d => d.avg_confidence),
+                            borderColor: '#4169E1',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Brightness (K)',
+                            data: location.daily_stats.map(d => d.avg_brightness),
+                            borderColor: '#FF8C00',
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: true } },
-                    scales: { y: { grid: { color: '#333' } }, x: { grid: { color: '#333' } } }
+                    plugins: { legend: { labels: { color: '#fff' } } },
+                    scales: {
+                        y: { position: 'left', grid: { color: '#333' }, ticks: { color: '#fff' } },
+                        y1: { position: 'right', grid: { display: false }, ticks: { color: '#fff' } },
+                        x: { grid: { color: '#333' }, ticks: { color: '#fff' } }
+                    }
                 }
             });
-        };
+        }
+    }
 
-        // --- SEQUENCE EXECUTION ---
-
-        document.getElementById('btn-start-verify').onclick = async () => {
-            const btn = document.getElementById('btn-start-verify');
-            btn.style.display = 'none'; // Hide button during sequence
-
-            // --- STAGE 1: SATELLITE ---
-            log("Checking Satellite Confidence Trend (5 Days)...");
-            updateNode(1, 'active');
-            drawStage1Chart();
-
-            await new Promise(r => setTimeout(r, 2000));
-
-            log("Confidence: 58% -> 64% -> 77% -> 89% -> 96%");
-            log("Trend: POSITIVE (Exponential Increase)");
-            log("Stage 1 Verified.");
-            updateNode(1, 'confirmed');
-
-            await new Promise(r => setTimeout(r, 1000));
-
-            // --- STAGE 2: ATMOSPHERIC ---
-            log("Initializing Atmospheric Scan (Radius 1km)...");
-            updateNode(2, 'active');
-            drawStage2Chart();
-
-            await new Promise(r => setTimeout(r, 2000));
-
-            // Check spikes from CSV (Latest entry)
-            // Latest: CO 345, Prev: 349. Wait, the provided CSV ends with specific high values.
-            // Let's use the spike logic: "1.5 - 3 times actual value"
-            // Assume normal is ~150.
-            const latest = stage2Data[stage2Data.length - 1];
-            log(`Current CO: ${latest.carbon_monoxide} μg/m³ (High)`);
-            log(`Current PM2.5: ${latest.pm2_5} μg/m³ (Spike Detected)`);
-            log(`Condition: ABNORMAL. > 2.0x Baseline.`);
-
-            log("Stage 2 Verified.");
-            updateNode(2, 'confirmed');
-
-            // ADD PULSING DOT
-            if (window.addConfirmedFireMarker && coordinates) {
-                window.addConfirmedFireMarker(coordinates.lng, coordinates.lat);
-                log("Map Marker Updated: Confirmed Hotspot.");
+    /**
+     * Get Location Name from OpenWeather API
+     */
+    async function getLocationName(lat, lon) {
+        try {
+            const response = await fetch(`/api/location-name?lat=${lat}&lon=${lon}`);
+            if (response.ok) {
+                const data = await response.json();
+                return data.name;
             }
+        } catch (error) {
+            console.error('Error fetching location name:', error);
+        }
+        return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    }
 
-            // --- STAGE 3: DRONE ---
-            log("Awaiting Drone Dispatch...");
+    /**
+     * Fly to Location on Map
+     */
+    function flyToLocation(lat, lon) {
+        if (window.map) {
+            closeAlertCenter();
+            window.map.flyTo({
+                center: [lon, lat],
+                zoom: 12,
+                pitch: 0,
+                bearing: 0,
+                duration: 2000
+            });
 
-            const btnArea = document.getElementById('action-area');
-            btnArea.innerHTML = `
-                <button id="btn-dispatch-drone" style="width:100%; padding:15px; background:#ef4444; border:none; border-radius:6px; color:#fff; font-weight:bold; cursor:pointer; font-size:16px; box-shadow:0 0 20px rgba(239, 68, 68, 0.4); animation:pulse 2s infinite;">
-                    <span class="material-icons-round" style="vertical-align:middle; margin-right:5px;">flight_takeoff</span>
-                    DISPATCH DRONE SQUADRON
-                </button>
-            `;
+            // Add marker
+            if (window.addConfirmedFireMarker) {
+                window.addConfirmedFireMarker(lon, lat);
+            }
+        }
+    }
 
-            document.getElementById('btn-dispatch-drone').onclick = async () => {
-                document.getElementById('btn-dispatch-drone').innerHTML = "DRONE DISPATCHED (ETA: 2m)";
-                document.getElementById('btn-dispatch-drone').disabled = true;
-                document.getElementById('btn-dispatch-drone').style.background = "#555";
-                document.getElementById('btn-dispatch-drone').style.animation = "none";
+    /**
+     * Close Alert Center
+     */
+    function closeAlertCenter() {
+        const modal = document.getElementById('alert-center-modal');
+        if (modal) modal.remove();
+    }
 
-                updateNode(3, 'active');
-                log("Drone taking off from Docking Station 4...");
-
-                // Show Drone Feed Simulation
-                const visualPanel = document.getElementById('visual-panel');
-                visualPanel.innerHTML = `
-                    <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px; color:#ddd;">Drone Live Feed</h3>
-                    <div style="position:relative; width:100%; height:300px; background:#000; overflow:hidden; border-radius:6px;">
-                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
-                             <div style="color:#0f0; font-family:monospace;">CONNECTING FEED...</div>
-                        </div>
-                        <!-- Overlay UI -->
-                        <div style="position:absolute; top:10px; left:10px; color:#0f0; font-family:monospace; font-size:12px; z-index:10;">
-                            ALT: 120m<br>SPD: 15m/s<br>BAT: 94%
-                        </div>
-                         <div style="position:absolute; top:10px; right:10px; color:#0f0; font-family:monospace; font-size:12px; z-index:10;">
-                            AI: SCANNING
-                        </div>
-                    </div>
-                `;
-
-                await new Promise(r => setTimeout(r, 2000));
-
-                log("Feed Established.");
-                // Simulating fire detection visuals
-                visualPanel.querySelector('div[style*="background:#000"]').style.background = "linear-gradient(45deg, #330000, #111)";
-                visualPanel.querySelector('div[style*="CONNECTING FEED"]').innerHTML = `
-                    <div style="width:100px; height:100px; border:2px solid #ff0000; position:relative;">
-                        <div style="position:absolute; top:-20px; left:0; background:#ff0000; color:#fff; font-size:10px; padding:2px;">CONFIDENCE: 98%</div>
-                    </div>
-                `;
-
-                await new Promise(r => setTimeout(r, 1500));
-
-                log("AI Analysis: WILDFIRE CONFIRMED.");
-                log("Thermal Max: 850°C.");
-                log("Est Area: 4.5 acres.");
-
-                await new Promise(r => setTimeout(r, 1000));
-
-                log("Stage 3 Verified.");
-                updateNode(3, 'confirmed', '#ef4444'); // Red for danger/final
-
-                // Final Report
-                log("SENDING ALERTS...");
-                await new Promise(r => setTimeout(r, 800));
-                log("Alerts Sent: Forest Office (Email/SMS), Fire Dept (Route Plan).");
-
-                document.getElementById('action-area').innerHTML = `
-                    <div style="background:rgba(16, 185, 129, 0.1); border:1px solid #10b981; color:#10b981; padding:15px; border-radius:6px; text-align:center; font-weight:bold;">
-                        INCIDENT RESPONDER ACTIVATED
-                    </div>
-                    <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px; color:#ccc;">
-                        <div>
-                            <b>Satellite Conf:</b> 96%<br>
-                            <b>Temp (Sat):</b> 20.6°C<br>
-                            <b>Frames:</b> 128
-                        </div>
-                        <div>
-                            <b>Drone Conf:</b> 99%<br>
-                            <b>Temp (Therm):</b> 850°C<br>
-                            <b>Affected:</b> 4.5 acres
-                        </div>
-                    </div>
-                `;
-            };
-        };
-    };
+    // Make functions globally available
+    window.closeAlertCenter = closeAlertCenter;
+    window.flyToLocation = flyToLocation;
 })();

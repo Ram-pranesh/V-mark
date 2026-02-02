@@ -56,39 +56,6 @@
                             <div style="font-size:1.2rem; color:#fff; font-weight:bold;" id="sb-area">--</div>
                         </div>
 
-                        <div style="background:#0f0f0f; padding:10px; border-radius:6px; border:1px solid #222;">
-                            <div style="font-size:0.8rem; color:#888; margin-bottom:5px;">Active Hotspots <span
-                                    id="sb-total-hotspots" style="color:#fff; font-weight:bold;">(0)</span></div>
-
-                            <!-- Severity Bars -->
-                            <div style="display:flex; flex-direction:column; gap:8px;">
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <span style="font-size:0.7rem; color:#ff4444; width:40px;">HIGH</span>
-                                    <div
-                                        style="flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden;">
-                                        <div id="bar-high" style="width:0%; height:100%; background:#ff4444;"></div>
-                                    </div>
-                                    <span style="font-size:0.7rem; color:#fff;" id="val-high">0</span>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <span style="font-size:0.7rem; color:#ff9800; width:40px;">MED</span>
-                                    <div
-                                        style="flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden;">
-                                        <div id="bar-med" style="width:0%; height:100%; background:#ff9800;"></div>
-                                    </div>
-                                    <span style="font-size:0.7rem; color:#fff;" id="val-med">0</span>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <span style="font-size:0.7rem; color:#ffeb3b; width:40px;">LOW</span>
-                                    <div
-                                        style="flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden;">
-                                        <div id="bar-low" style="width:0%; height:100%; background:#ffeb3b;"></div>
-                                    </div>
-                                    <span style="font-size:0.7rem; color:#fff;" id="val-low">0</span>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Sidebar Docks List (Moved Here) -->
                         <div style="background:#0f0f0f; padding:10px; border-radius:6px; border:1px solid #222;">
                             <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Available Docking Stations
@@ -108,7 +75,9 @@
                         <span>System</span>
                     </div>
 
-                    <div class="control-item">
+                    <div id="drone-alert-btn" class="control-item"
+                        onclick="if(window.openDroneAlertCenter) window.openDroneAlertCenter(); else console.log('Drone Alert System Loading...');"
+                        style="cursor:pointer;">
                         <span class="material-icons-round"
                             style="color:#ff6b35; margin-right:5px;">notifications_active</span>
                         <span>Alert System</span>
@@ -358,6 +327,7 @@
     <script src="scripts/drone-data.js?v=2"></script>
     <script src="./scripts/fire-service.js"></script>
     <script src="scripts/drone-ui.js?v=2"></script>
+    <script src="scripts/drone-alert.js?v=1"></script>
     <script src="scripts/drone-map.js?v=2"></script>
     <script>
         window.addEventListener('DOMContentLoaded', () => {

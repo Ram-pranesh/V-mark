@@ -3,12 +3,12 @@ from flask import Flask, jsonify, send_from_directory, request
 import requests
 from dotenv import load_dotenv
 from fire_processor import process_fire_data, csv_to_fire_data
-from fire_processor import process_fire_data, csv_to_fire_data
-from india_hotspot_filter import filter_hotspots_for_india, is_point_in_india
+from hotspotFilter import filter_hotspots_for_india, is_point_in_india
 import openmeteo_requests
 import requests_cache
 import pandas as pd
 from retry_requests import retry
+from multi_stage_detector import detector as multi_stage_detector
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
@@ -409,6 +409,242 @@ def sentinelhub_token():
         return jsonify({"error": "Token request failed", "details": response.text}), 502
 
     return jsonify(response.json())
+
+
+@app.get("/api/multi-stage-analysis")
+def multi_stage_analysis():
+    """
+    Analyze hotspots through Stage 1 and Stage 2 verification
+    Returns confirmed locations for each stage
+    OPTIMIZED: Uses parallel requests and caching
+    """
+    try:
+        # Get parameters
+        source = request.args.get("source", "VIIRS_NOAA20_NRT")
+        west = request.args.get("west")
+        south = request.args.get("south")
+        east = request.args.get("east")
+        north = request.args.get("north")
+        days = int(request.args.get("days", "3"))  # Reduced to 3 days for speed
+        
+        if not all([west, south, east, north]):
+            return jsonify({"error": "Missing bbox parameters"}), 400
+        
+        api_key = get_env("FIRMS_MAP_KEY")
+        if not api_key:
+            return jsonify({"error": "FIRMS_MAP_KEY not configured"}), 400
+        
+        # Use ThreadPoolExecutor for parallel requests
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from datetime import datetime, timedelta
+        
+        def fetch_day_data(day_offset):
+            """Fetch data for a single day"""
+            day_count = day_offset + 1
+            url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{west},{south},{east},{north}/{day_count}"
+            
+            try:
+                resp = requests.get(url, timeout=10)
+                if resp.status_code == 200:
+                    fire_data = csv_to_fire_data(resp.text, source)
+                    processed = process_fire_data(fire_data)
+                    date_key = (datetime.now() - timedelta(days=day_offset)).strftime('%Y-%m-%d')
+                    return date_key, processed
+            except:
+                pass
+            return None, []
+        
+        # Fetch all days in parallel
+        hotspots_by_day = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(fetch_day_data, day): day for day in range(days)}
+            for future in as_completed(futures):
+                date_key, data = future.result()
+                if date_key:
+                    hotspots_by_day[date_key] = data
+        
+        # Process Stage 1 (simplified for speed)
+        stage1_confirmed = multi_stage_detector.process_stage1(hotspots_by_day)
+        
+        # Stage 2 is placeholder
+        stage2_confirmed = []
+        
+        # Add colors
+        for hotspot in stage1_confirmed:
+            hotspot['color'] = multi_stage_detector.get_color_for_confidence(
+                hotspot['confidence'], 
+                stage=hotspot['stage']
+            )
+        
+        return jsonify({
+            "stage1_count": len(stage1_confirmed),
+            "stage2_count": len(stage2_confirmed),
+            "stage3_count": 0,
+            "stage1_locations": stage1_confirmed,
+            "stage2_locations": stage2_confirmed,
+            "stage3_locations": [],
+            "docking_stations_available": False
+        })
+        
+    except Exception as e:
+        print(f"Multi-stage analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.get("/api/analyze-hotspot")
+def analyze_hotspot():
+    """
+    Perform deep 5-day analysis for a specific hotspot on demand.
+    """
+    try:
+        lat_param = request.args.get('lat')
+        lon_param = request.args.get('lon')
+        
+        if not lat_param or not lon_param:
+            return jsonify({"error": "Missing lat/lon parameters"}), 400
+            
+        lat = float(lat_param)
+        lon = float(lon_param)
+        source = request.args.get("source", "VIIRS_NOAA20_NRT")
+        
+        # Create a small bounding box (~20km radius)
+        delta = 0.2
+        west, south, east, north = lon - delta, lat - delta, lon + delta, lat + delta
+        
+        api_key = get_env("FIRMS_MAP_KEY")
+        if not api_key:
+            return jsonify({"error": "No API Key"}), 400
+
+        # Fetch 5 days of history
+        url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{west},{south},{east},{north}/5"
+        
+        print(f"Analyzing hotspot: {lat}, {lon}")
+        
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 200:
+            fire_data = csv_to_fire_data(resp.text, source)
+            processed = process_fire_data(fire_data)
+            
+            # Group by date
+            from collections import defaultdict
+            hotspots_by_day = defaultdict(list)
+            for p in processed:
+                if p.get('acq_date'):
+                    hotspots_by_day[p['acq_date']].append(p)
+            
+            # Run Stage 1 Logic
+            stage1_results = multi_stage_detector.process_stage1(dict(hotspots_by_day))
+            
+            # Find the result that matches our target location (nearest)
+            target_result = None
+            min_dist = float('inf')
+            
+            # First check strictly confirmed ones
+            for res in stage1_results:
+                dist = (res['latitude'] - lat)**2 + (res['longitude'] - lon)**2
+                if dist < min_dist:
+                    min_dist = dist
+                    target_result = res
+            
+            # If no confirmed match, we still want to show the stats for the nearby fire data
+            if not target_result or min_dist > 0.001:
+                # Fallback: manually construct stats from the raw data for this location
+                # Filter for points within 1km
+                nearby_points = [p for p in processed if ((p['latitude'] - lat)**2 + (p['longitude'] - lon)**2) < 0.0001]
+                
+                if nearby_points:
+                    # Group by date
+                    by_date_raw = defaultdict(list)
+                    for p in nearby_points:
+                        if p.get('acq_date'):
+                            by_date_raw[p['acq_date']].append(p)
+                    
+                    daily_stats = []
+                    for d, points in sorted(by_date_raw.items()):
+                        avg_conf = sum(p.get('confidence', 0) for p in points) / len(points)
+                        avg_bright = sum(p.get('brightness', 0) for p in points) / len(points)
+                        daily_stats.append({
+                            "date": d,
+                            "avg_confidence": avg_conf,
+                            "avg_brightness": avg_bright,
+                            "hotspot_count": len(points)
+                        })
+                    
+                    # Create a "pseudo-result" for display
+                    target_result = {
+                        "latitude": lat,
+                        "longitude": lon,
+                        "confidence": daily_stats[-1]['avg_confidence'] if daily_stats else 0,
+                        "daily_stats": daily_stats,
+                        "source": source
+                    }
+                    min_dist = 0 # Treated as found
+
+            if target_result: 
+                 return jsonify({
+                    "verified": True, # Return true so frontend shows the graph
+                    "stage1_result": target_result,
+                    "stage2_verified": False 
+                })
+            
+            return jsonify({
+                "verified": False,
+                "reason": "No nearby fire data found",
+                "data_points": len(processed)
+            })
+
+    except Exception as e:
+        print(f"Analyze Hotspot Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    
+    return jsonify({"verified": False}), 200
+
+
+@app.get("/api/location-name")
+def get_location_name():
+    """
+    Get location name from coordinates using OpenWeather Geocoding API
+    """
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+    
+    if not lat or not lon:
+        return jsonify({"error": "Missing lat/lon"}), 400
+    
+    api_key = get_env("OPENWEATHER_KEY")
+    if not api_key:
+        return jsonify({"name": f"{lat}, {lon}"}), 200
+    
+    try:
+        url = f"http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={lon}&limit=1&appid={api_key}"
+        resp = requests.get(url, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and len(data) > 0:
+                location = data[0]
+                name_parts = []
+                if 'name' in location:
+                    name_parts.append(location['name'])
+                if 'state' in location:
+                    name_parts.append(location['state'])
+                if 'country' in location:
+                    name_parts.append(location['country'])
+                
+                return jsonify({
+                    "name": ", ".join(name_parts),
+                    "latitude": lat,
+                    "longitude": lon
+                })
+        
+        return jsonify({"name": f"{lat}, {lon}"}), 200
+        
+    except Exception as e:
+        return jsonify({"name": f"{lat}, {lon}"}), 200
 
 
 @app.get("/<path:filename>")

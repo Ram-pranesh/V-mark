@@ -1,8 +1,6 @@
 from shapely.geometry import Point, Polygon
 import json
 
-# India's approximate boundary polygon (simplified)
-# Coordinates: [longitude, latitude]
 INDIA_BOUNDARY = Polygon([
     [68.1766, 7.9654],      # Southern tip (near Kanyakumari)
     [68.1766, 35.5087],     # Northern Kashmir
@@ -134,10 +132,7 @@ def process_firms_data(firms_response):
     
     return india_hotspots
 
-
-# Example usage
 if __name__ == "__main__":
-    # Test with sample hotspots
     sample_hotspots = [
         {"latitude": 28.6139, "longitude": 77.2090, "name": "Delhi"},  # India
         {"latitude": 19.0760, "longitude": 72.8777, "name": "Mumbai"},  # India

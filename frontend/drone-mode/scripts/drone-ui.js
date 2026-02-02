@@ -687,6 +687,20 @@ const UI = {
             }
             this.toggleCoverage(false);
         }
+    },
+
+    flyToLocation(lat, lon) {
+        if (window.map) {
+            window.map.flyTo({
+                center: [lon, lat],
+                zoom: 14,
+                pitch: 45,
+                duration: 2000
+            });
+
+            // Add a temporary highlight marker
+            this.showPointMarker([lon, lat], "Alert Site", "#ff6b35");
+        }
     }
 };
 

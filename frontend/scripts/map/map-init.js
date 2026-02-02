@@ -160,10 +160,17 @@ map.on('load', () => {
 
 // Helper to add a confirmed fire marker
 window.addConfirmedFireMarker = (lng, lat) => {
-  const id = `confirmed-fire-${Date.now()}`;
+  // Remove existing marker if any
+  if (window.lastConfirmedFireId) {
+    if (map.getLayer(window.lastConfirmedFireId)) map.removeLayer(window.lastConfirmedFireId);
+    if (map.getSource(window.lastConfirmedFireId)) map.removeSource(window.lastConfirmedFireId);
+    window.lastConfirmedFireId = null;
+  }
 
-  // Check if source exists, if not add it (allows multiple points if we manage data properly, 
-  // but here we'll just add a unique source/layer for each for simplicity in demo)
+  const id = `confirmed-fire-${Date.now()}`;
+  window.lastConfirmedFireId = id;
+
+  // Check if source exists, if not add it
   map.addSource(id, {
     'type': 'geojson',
     'data': {

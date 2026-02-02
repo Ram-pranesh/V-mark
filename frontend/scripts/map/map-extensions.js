@@ -180,14 +180,7 @@
                         2, ['interpolate', ['linear'], ['get', 'frp'], 0, 3, 100, 8, 500, 15],
                         8, ['interpolate', ['linear'], ['get', 'frp'], 0, 8, 100, 20, 500, 40]
                     ],
-                    'circle-color': [
-                        'match',
-                        ['get', 'display_color'],
-                        'yellow', '#ffeb3b',
-                        'orange', '#ff9800',
-                        'red', '#f44336',
-                        '#ff4500' // default
-                    ],
+                    'circle-color': ['get', 'display_color'], // Use hex color directly
                     'circle-blur': 1,
                     'circle-opacity': 0.5
                 }
@@ -204,14 +197,7 @@
                         2, ['interpolate', ['linear'], ['get', 'frp'], 0, 2, 100, 5, 500, 10],
                         8, ['interpolate', ['linear'], ['get', 'frp'], 0, 5, 100, 12, 500, 25]
                     ],
-                    'circle-color': [
-                        'match',
-                        ['get', 'display_color'],
-                        'yellow', '#ffeb3b',
-                        'orange', '#ff9800',
-                        'red', '#f44336',
-                        '#ff4500' // default
-                    ],
+                    'circle-color': ['get', 'display_color'], // Use hex color directly
                     'circle-stroke-width': 1,
                     'circle-stroke-color': '#fff'
                 }
@@ -223,9 +209,8 @@
                 const p = f.properties;
                 const coords = f.geometry.coordinates;
 
-                // Determine severity badge color
-                const severityBadgeColor = p.display_color === 'yellow' ? '#fbc02d' :
-                    p.display_color === 'orange' ? '#f57c00' : '#d32f2f';
+                // Use the actual display_color from the hotspot (hex color)
+                const severityBadgeColor = p.display_color || '#FF8C00';
 
                 // Format confidence display - keep VIIRS as original (l/n/h)
                 let confidenceDisplay = p.confidence;

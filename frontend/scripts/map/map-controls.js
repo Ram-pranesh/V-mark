@@ -812,7 +812,7 @@
       }
 
       // Fetch general locations from Nominatim with more details
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&countrycodes=in`)
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`)
         .then(r => r.json())
         .then(data => {
           if (data && data.length > 0) {
@@ -964,7 +964,7 @@
     }
 
     // Fall back to Nominatim
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in`)
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`)
       .then(r => r.json())
       .then(data => {
         if (data && data.length > 0) {

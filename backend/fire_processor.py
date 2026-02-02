@@ -77,25 +77,33 @@ def process_fire_data(fire_data_list):
                 except (ValueError, TypeError):
                     normalized_conf = 0
             
-        # --- STEP 2: FILTER & CLASSIFY ---
+        # --- STEP 2: FILTER & CLASSIFY WITH GRADIENT COLORS ---
         
         # Filter: Skip anything below 50
         if normalized_conf < 50:
             continue
 
-        # Classify based on specific ranges: 50-70 (Low), 70-87 (Medium), 87-100 (High)
+        # New color system with gradients
         severity_label = ""
         severity_color = ""
 
-        if 50 <= normalized_conf < 70:
-            severity_label = "Low Severity"
-            severity_color = "yellow"
-        elif 70 <= normalized_conf < 87:
-            severity_label = "Medium Severity"
-            severity_color = "orange"
-        elif 87 <= normalized_conf <= 100:
-            severity_label = "High Severity"
-            severity_color = "red"
+        if 50 <= normalized_conf < 60:
+            # Low - Mild green
+            severity_label = "Low"
+            severity_color = "#90EE90"  # Mild green
+        elif 60 <= normalized_conf < 80:
+            # Medium - Yellow
+            severity_label = "Medium"
+            severity_color = "#FFD700"  # Yellow
+        elif 80 <= normalized_conf < 90:
+            # Approaching Stage 1 - Gradient from yellow to orange
+            severity_label = "High"
+            ratio = (normalized_conf - 80) / 10  # 0 to 1
+            severity_color = interpolate_color("#FFD700", "#FF8C00", ratio)
+        elif 90 <= normalized_conf <= 100:
+            # Stage 1 confirmed - Orange
+            severity_label = "Stage 1"
+            severity_color = "#FF8C00"  # Orange
         
         # --- STEP 3: CONSTRUCT CLEAN DATA ---
         # Keep ORIGINAL confidence value, not normalized
@@ -117,6 +125,31 @@ def process_fire_data(fire_data_list):
         processed_hotspots.append(clean_point)
 
     return processed_hotspots
+
+
+def interpolate_color(color1_hex, color2_hex, ratio):
+    """
+    Interpolate between two hex colors
+    
+    Args:
+        color1_hex: Starting color (e.g., "#FFD700")
+        color2_hex: Ending color (e.g., "#FF8C00")
+        ratio: 0.0 to 1.0
+        
+    Returns:
+        Interpolated hex color
+    """
+    # Convert hex to RGB
+    c1 = tuple(int(color1_hex[i:i+2], 16) for i in (1, 3, 5))
+    c2 = tuple(int(color2_hex[i:i+2], 16) for i in (1, 3, 5))
+    
+    # Interpolate
+    r = int(c1[0] + (c2[0] - c1[0]) * ratio)
+    g = int(c1[1] + (c2[1] - c1[1]) * ratio)
+    b = int(c1[2] + (c2[2] - c1[2]) * ratio)
+    
+    return f'#{r:02x}{g:02x}{b:02x}'
+
 
 
 def csv_to_fire_data(csv_text, source_name):

@@ -1,10 +1,6 @@
-"""
-Test script for fire data processing
-"""
 import json
 from fire_processor import process_fire_data
 
-# Mock Data simulating a mix of MODIS (numeric) and VIIRS (string)
 api_response_mock = [
     {"latitude": 13.02, "longitude": 80.22, "confidence": 95, "satellite": "Terra", "frp": 150, "brightness": 350, "acq_date": "2026-02-01", "acq_time": "0830", "source": "MODIS Terra/Aqua"},     # High MODIS
     {"latitude": 11.01, "longitude": 76.95, "confidence": 40, "satellite": "Aqua", "frp": 20, "brightness": 300, "acq_date": "2026-02-01", "acq_time": "0845", "source": "MODIS Terra/Aqua"},      # Junk MODIS (Should disappear)

@@ -11,8 +11,15 @@
       coordsDiv.textContent = `Lat: ${lat} | Lng: ${lng}`;
     }
 
-    const mapSelect = window.mapSelect || (typeof mapSelect !== "undefined" ? mapSelect : null);
-    const currentMode = mapSelect ? mapSelect.value : "satellite";
+    // Safe check for mapSelect
+    let currentMode = "satellite";
+    const mapSelectEl = document.getElementById("map-style");
+    if (mapSelectEl) {
+      currentMode = mapSelectEl.value;
+    } else if (typeof window.mapSelect !== 'undefined' && window.mapSelect) {
+      currentMode = window.mapSelect.value;
+    }
+
     map.getCanvas().style.cursor =
       currentMode === "temp" || currentMode === "wind" ? "crosshair" : "";
   });
