@@ -87,24 +87,11 @@ const UI = {
         const label = document.getElementById('forest-select-label');
         if (label) label.innerText = data.name;
 
-        // A. Update Left Sidebar Stats
+        // A. Update Left Sidebar Area
         const statsContainer = document.getElementById('sidebar-stats');
         if (statsContainer) {
             statsContainer.style.display = 'flex';
-
             if (document.getElementById('sb-area')) document.getElementById('sb-area').innerText = data.acres + ' acres';
-            if (document.getElementById('sb-total-hotspots')) document.getElementById('sb-total-hotspots').innerText = `(${data.hotspots.total})`;
-
-            const total = data.hotspots.total || 1;
-            const setBar = (id, val) => {
-                const bar = document.getElementById('bar-' + id);
-                const txt = document.getElementById('val-' + id);
-                if (bar) bar.style.width = ((val / total) * 100) + '%';
-                if (txt) txt.innerText = val;
-            };
-            setBar('high', data.hotspots.severity.high);
-            setBar('med', data.hotspots.severity.medium);
-            setBar('low', data.hotspots.severity.low);
         }
 
         // B. Populate Dock List (Sidebar)
