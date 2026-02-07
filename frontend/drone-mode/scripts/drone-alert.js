@@ -9,10 +9,10 @@
 
     // Muted Color Palette
     const COLORS = {
-        ORANGE: '#D97706', // Muted Orange
-        BLUE: '#3B82F6',   // Muted Blue
-        RED: '#B91C1C',    // Muted Red
-        GREEN: '#059669',  // Muted Green
+        ORANGE: '#D97706', 
+        BLUE: '#3B82F6',   
+        RED: '#B91C1C',    
+        GREEN: '#059669',  
         TEXT_DARK: '#1a1a1a',
         TEXT_GRAY: '#666',
         BG_WHITE: '#ffffff',
@@ -20,7 +20,6 @@
         BORDER: '#e1e4e8'
     };
 
-    // Shared Alert Data - Exported for Map to use
     window.DroneAlertData = {
         stage1_count: 5,
         stage2_count: 3,
@@ -354,7 +353,6 @@
                         </div>
                     </div>
 
-                    <!-- DRONE PATH VISUALIZATION -->
                     <div style="margin-bottom:25px; border:1px solid ${COLORS.BORDER}; border-radius:8px; overflow:hidden;">
                         <div style="background:${COLORS.BG_LIGHT}; padding:8px 15px; border-bottom:1px solid ${COLORS.BORDER}; font-size:11px; font-weight:700; color:${COLORS.TEXT_GRAY};">
                             FLIGHT PATH TRAJECTORY ANALYSIS
@@ -409,7 +407,6 @@
             let headerContent = '';
 
             if (stage === 2) {
-                // Dropdown for Stage 2
                 headerContent = `
                     <select id="s2-metric-select" onchange="window.DroneAlert.updateStage2Chart('${id}')" 
                         style="padding:6px; border-radius:4px; border:1px solid ${COLORS.BORDER}; font-size:12px; outline:none; color:${COLORS.TEXT_DARK}; width: 140px;">

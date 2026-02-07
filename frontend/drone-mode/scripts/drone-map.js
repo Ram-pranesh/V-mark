@@ -79,6 +79,14 @@ map.on('load', () => {
         map.fitBounds(bounds, { padding: 60, pitch: 0 });
     }
 
+    // Initialize Communication Nodes System
+    if (window.COMM_NODES_SYSTEM && window.DRONE_DB) {
+        COMM_NODES_SYSTEM.generateNodes();
+        COMM_NODES_SYSTEM.addNodesToMap(map);
+        COMM_NODES_SYSTEM.addLinksToMap(map);
+        COMM_NODES_SYSTEM.addCoverageToMap(map);
+    }
+
     // Load Fires
     loadLiveSatelliteFires();
 });
@@ -151,47 +159,82 @@ async function loadLiveSatelliteFires() {
         stage3_locations.forEach(loc => addSpecificPoint(loc, 'High', '#B91C1C'));
     }
 
-    // 2. FILLER DATA: Distributed across ALL Forests inside India
-    // Iterate ALL Forests to ensure visual coverage "inside every polygons"
-    Object.values(window.DRONE_DB.forests).forEach((forest, idx) => {
-        if (!forest.coordinates) return;
+    // 2. FILLER DATA: Distributed across India (inside AND outside forest boundaries)
+    // Use hotspot data from DRONE_DB
+    Object.entries(window.DRONE_DB.forests).forEach(([forestKey, forest]) => {
+        if (!forest.coordinates || !forest.hotspots) return;
 
         const forestPoly = turf.polygon([forest.coordinates]);
-        // Add 1-2 random points per forest
-        const count = Math.floor(Math.random() * 2) + 1;
+        const bbox = turf.bbox(forestPoly);
 
-        for (let i = 0; i < count; i++) {
-            // Generate point inside
-            let pt = null;
-            // Retry loop
-            for (let k = 0; k < 20; k++) {
-                const bbox = turf.bbox(forestPoly);
-                const rnd = turf.randomPoint(1, { bbox: bbox }).features[0];
-                if (turf.booleanPointInPolygon(rnd, forestPoly)) {
-                    pt = rnd;
-                    break;
+        // Expand bbox to include surrounding areas (50km buffer)
+        const expandedBbox = [
+            bbox[0] - 0.5, bbox[1] - 0.5,
+            bbox[2] + 0.5, bbox[3] + 0.5
+        ];
+
+        // Severity configuration with SOFTER colors (reduced contrast)
+        const severityConfig = {
+            stage3: { label: 'Stage 3', color: '#C94A4A', brightness: [800, 950], confidence: [92, 99] },
+            stage2: { label: 'Stage 2', color: '#6B8EC9', brightness: [650, 800], confidence: [85, 92] },
+            stage1: { label: 'Stage 1', color: '#D9A066', brightness: [500, 650], confidence: [75, 85] },
+            medium: { label: 'Medium', color: '#D9C766', brightness: [350, 500], confidence: [60, 75] },
+            low: { label: 'Low', color: '#7AB87A', brightness: [280, 350], confidence: [50, 60] }
+        };
+
+        // Generate hotspots for each severity level
+        Object.entries(forest.hotspots.severity).forEach(([severityKey, count]) => {
+            const config = severityConfig[severityKey];
+            if (!config || count === 0) return;
+
+            for (let i = 0; i < count; i++) {
+                // 60% inside forest, 40% outside (spread across India)
+                const shouldBeInside = Math.random() < 0.6;
+                let pt = null;
+
+                if (shouldBeInside) {
+                    // Generate inside forest
+                    for (let k = 0; k < 20; k++) {
+                        const rnd = turf.randomPoint(1, { bbox: bbox }).features[0];
+                        if (turf.booleanPointInPolygon(rnd, forestPoly)) {
+                            pt = rnd;
+                            break;
+                        }
+                    }
+                } else {
+                    // Generate outside forest (in expanded area)
+                    for (let k = 0; k < 20; k++) {
+                        const rnd = turf.randomPoint(1, { bbox: expandedBbox }).features[0];
+                        if (!turf.booleanPointInPolygon(rnd, forestPoly)) {
+                            pt = rnd;
+                            break;
+                        }
+                    }
+                }
+
+                if (pt) {
+                    const brightness = Math.floor(Math.random() * (config.brightness[1] - config.brightness[0]) + config.brightness[0]);
+                    const confidence = Math.floor(Math.random() * (config.confidence[1] - config.confidence[0]) + config.confidence[0]);
+
+                    mockFires.push({
+                        type: "Feature",
+                        geometry: pt.geometry,
+                        properties: {
+                            id: `${forestKey}-${severityKey}-${i}`,
+                            severity_label: config.label,
+                            display_color: config.color,
+                            brightness: brightness,
+                            frp: severityKey === 'stage3' ? 12.5 : severityKey === 'stage2' ? 8.5 : severityKey === 'stage1' ? 5.5 : severityKey === 'medium' ? 3.2 : 1.5,
+                            confidence: confidence + '%',
+                            city: forest.location,
+                            source: severityKey.includes('stage') ? 'ALERT SYSTEM' : 'SATELLITE',
+                            acq_date: new Date().toISOString().split('T')[0],
+                            acq_time: severityKey.includes('stage') ? 'LIVE' : '14:20'
+                        }
+                    });
                 }
             }
-
-            if (pt) {
-                mockFires.push({
-                    type: "Feature",
-                    geometry: pt.geometry,
-                    properties: {
-                        id: `F-Gen-${idx}-${i}`,
-                        severity_label: 'Low',
-                        display_color: '#059669', // Muted Green
-                        brightness: 280 + Math.random() * 50,
-                        frp: 1.2,
-                        confidence: (Math.random() * 40 + 40).toFixed(0) + '%',
-                        city: forest.name,
-                        source: "HISTORICAL",
-                        acq_date: "2024-05-18",
-                        acq_time: "14:20"
-                    }
-                });
-            }
-        }
+        });
     });
 
 
@@ -225,14 +268,24 @@ async function loadLiveSatelliteFires() {
 
             // Action Button Logic
             let btnHtml = '';
-            // New Animation Action
-            if (p.severity_label === 'High') {
+            // Stage 3 - Full Analysis
+            if (p.severity_label === 'Stage 3') {
                 btnHtml = `<button onclick="window.DroneAlert.openSpecialStats('${p.id}', ${coords[1]}, ${coords[0]}, '${p.city}')" style="margin-top: 12px; width: 100%; padding: 8px; background: ${p.display_color}; border: none; border-radius: 4px; color: #fff; font-weight: 800; cursor: pointer; font-size: 11px;">VIEW FULL ANALYSIS</button>`;
-            } else if (p.severity_label === 'Medium' || p.severity_label === 'Stage 2') {
-                const stage = p.severity_label === 'Stage 2' ? 2 : 1;
-                btnHtml = `<button onclick="window.DroneAlert.openDetailsWindow('${p.id}', ${coords[1]}, ${coords[0]}, '${p.city}', ${stage})" style="margin-top: 12px; width: 100%; padding: 8px; background: ${p.display_color}; border: none; border-radius: 4px; color: #fff; font-weight: 800; cursor: pointer; font-size: 11px;">VIEW TELEMETRY</button>`;
-            } else {
-                // Low severity / others - Zoom Animation Only
+            }
+            // Stage 2 - Telemetry
+            else if (p.severity_label === 'Stage 2') {
+                btnHtml = `<button onclick="window.DroneAlert.openDetailsWindow('${p.id}', ${coords[1]}, ${coords[0]}, '${p.city}', 2)" style="margin-top: 12px; width: 100%; padding: 8px; background: ${p.display_color}; border: none; border-radius: 4px; color: #fff; font-weight: 800; cursor: pointer; font-size: 11px;">VIEW TELEMETRY</button>`;
+            }
+            // Stage 1 - Telemetry
+            else if (p.severity_label === 'Stage 1') {
+                btnHtml = `<button onclick="window.DroneAlert.openDetailsWindow('${p.id}', ${coords[1]}, ${coords[0]}, '${p.city}', 1)" style="margin-top: 12px; width: 100%; padding: 8px; background: ${p.display_color}; border: none; border-radius: 4px; color: #fff; font-weight: 800; cursor: pointer; font-size: 11px;">VIEW STATS</button>`;
+            }
+            // Medium - View Stats
+            else if (p.severity_label === 'Medium') {
+                btnHtml = `<button onclick="window.DroneAlert.openDetailsWindow('${p.id}', ${coords[1]}, ${coords[0]}, '${p.city}', 1)" style="margin-top: 12px; width: 100%; padding: 8px; background: ${p.display_color}; border: none; border-radius: 4px; color: #fff; font-weight: 800; cursor: pointer; font-size: 11px;">VIEW STATS</button>`;
+            }
+            // Low - Inspection Animation
+            else {
                 btnHtml = `<button onclick="window.DroneMap.animateInspection(${coords[1]}, ${coords[0]})" style="margin-top: 12px; width: 100%; padding: 8px; background: #333; border: none; border-radius: 4px; color: #fff; font-weight: 700; cursor: pointer; font-size: 11px; text-transform:uppercase;">Inspect Signal</button>`;
             }
 
