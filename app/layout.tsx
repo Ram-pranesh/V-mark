@@ -11,13 +11,12 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "V-mark | Satellite Telemetry & Fire Detection",
   description:
-    "Advanced satellite telemetry platform for real-time fire detection, atmospheric analysis, and drone-based verification. Multi-stage fire alert system powered by MODIS, VIIRS, and Sentinel-2 data.",
+    "Advanced satellite telemetry platform for real-time fire detection, atmospheric analysis, and drone-based verification.",
   keywords: [
     "satellite telemetry",
     "fire detection",
     "FIRMS",
     "drone operations",
-    "atmospheric analysis",
   ],
 };
 

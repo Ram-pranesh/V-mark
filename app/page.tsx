@@ -1,19 +1,8 @@
-import { Navbar } from "@/components/navbar";
-import { HeroSection } from "@/components/landing/hero-section";
-import { FeaturesSection } from "@/components/landing/features-section";
-import { StatsSection } from "@/components/landing/stats-section";
-import { HowItWorksSection } from "@/components/landing/how-it-works-section";
-import { Footer } from "@/components/landing/footer";
-
 export default function Home() {
+  console.log("[v0] Home page rendered");
   return (
-    <main className="min-h-screen bg-background">
-      <Navbar />
-      <HeroSection />
-      <StatsSection />
-      <FeaturesSection />
-      <HowItWorksSection />
-      <Footer />
-    </main>
+    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "#0a0a0f" }}>
+      <h1 className="text-4xl font-bold" style={{ color: "#e8e8ed" }}>V-mark - Satellite Telemetry Platform</h1>
+    </div>
   );
 }
