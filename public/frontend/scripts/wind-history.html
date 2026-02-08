@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../assets/css/wind-history.css">
+  
+</head>
+
+<body>
+
+
+  <div id="map"></div>
+
+  <div id="wind-tooltip" style="display:none;"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-velocity@1.8.0/dist/leaflet-velocity.js"></script>
+
+  <script>
+    var map = L.map('map', { center: [20.0, 78.0], zoom: 4, zoomControl: false, attributionControl: false });
+    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+    var activeWindLayer = null;
+    var windGrid = null;
+    satellite.addTo(map);
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+
+    var locateControl = L.control({ position: 'topright' });
+    locateControl.onAdd = function () {
+      var button = L.DomUtil.create('button', 'leaflet-bar');
+      button.type = 'button';
+      button.title = 'Locate';
+      button.style.width = '30px';
+      button.style.height = '30px';
+      button.style.background = '#fff';
+      button.style.cursor = 'pointer';
+      button.innerHTML = '&#9673;';
+      L.DomEvent.on(button, 'click', function (e) {
+        L.DomEvent.stopPropagation(e);
+        map.locate({ setView: true, maxZoom: 8 });
+      });
+      return button;
+    };
+    locateControl.addTo(map);
+
+    const wrapLon = (lon, lo1, dx, nx) => {
+      const span = dx * (nx - 1);
+      let l = lon;
+      while (l < lo1) l += 360;
+      while (l > lo1 + span) l -= 360;
+      return l;
+    };
+
+    const buildGrid = (records) => {
+      if (!records || records.length < 2) return null;
+      const uRec = records.find((r) => r.header && r.header.parameterNumber === 2) || records[0];
+      const vRec = records.find((r) => r.header && r.header.parameterNumber === 3) || records[1];
+      const header = uRec.header;
+      return {
+        lo1: header.lo1,
+        la1: header.la1,
+        dx: header.dx,
+        dy: header.dy,
+        nx: header.nx,
+        ny: header.ny,
+        u: uRec.data,
+        v: vRec.data
+      };
+    };
+
+    const interpolate = (grid, lon, lat) => {
+      const { lo1, la1, dx, dy, nx, ny, u, v } = grid;
+      const adjLon = wrapLon(lon, lo1, dx, nx);
+      const i = (adjLon - lo1) / dx;
+      const j = (la1 - lat) / dy;
+      if (i < 0 || i > nx - 1 || j < 0 || j > ny - 1) return null;
+
+      const fi = Math.floor(i);
+      const ci = Math.min(fi + 1, nx - 1);
+      const fj = Math.floor(j);
+      const cj = Math.min(fj + 1, ny - 1);
+      const idx = (x, y) => y * nx + x;
+
+      const g00 = [u[idx(fi, fj)], v[idx(fi, fj)]];
+      const g10 = [u[idx(ci, fj)], v[idx(ci, fj)]];
+      const g01 = [u[idx(fi, cj)], v[idx(fi, cj)]];
+      const g11 = [u[idx(ci, cj)], v[idx(ci, cj)]];
+
+      const tx = i - fi;
+      const ty = j - fj;
+
+      const ux0 = g00[0] * (1 - tx) + g10[0] * tx;
+      const ux1 = g01[0] * (1 - tx) + g11[0] * tx;
+      const vx0 = g00[1] * (1 - tx) + g10[1] * tx;
+      const vx1 = g01[1] * (1 - tx) + g11[1] * tx;
+
+      return {
+        u: ux0 * (1 - ty) + ux1 * ty,
+        v: vx0 * (1 - ty) + vx1 * ty
+      };
+    };
+
+    function updateData() {
+      if (activeWindLayer) map.removeLayer(activeWindLayer);
+
+      let filename = 'https://onaci.github.io/leaflet-velocity/wind-global.json';
+
+      fetch(filename)
+        .then(r => {
+          if (!r.ok) throw new Error("File missing");
+          return r.json();
+        })
+        .then(data => {
+          windGrid = buildGrid(data);
+          activeWindLayer = L.velocityLayer({
+            displayValues: false,
+            displayOptions: { position: 'bottomright', emptyString: '', velocityType: 'Wind' },
+            data: data,
+            maxVelocity: 15,
+            velocityScale: 0.01
+          });
+          activeWindLayer.addTo(map);
+        })
+        .catch(err => {
+          console.error(err);
+        });
+    }
+
+    updateData();
+
+    map.on('mousemove', function (e) {
+      const coordsDiv = window.parent.document.getElementById('coords');
+      if (coordsDiv) {
+        coordsDiv.textContent = `Lat: ${e.latlng.lat.toFixed(6)} | Lng: ${e.latlng.lng.toFixed(6)}`;
+      }
+
+      const tooltip = document.getElementById('wind-tooltip');
+      if (!tooltip || !windGrid) return;
+
+      const wind = interpolate(windGrid, e.latlng.lng, e.latlng.lat);
+      if (!wind) {
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      const speed = Math.sqrt(wind.u * wind.u + wind.v * wind.v);
+      let direction = (Math.atan2(-wind.u, -wind.v) * 180) / Math.PI;
+      if (direction < 0) direction += 360;
+
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `Speed: ${speed.toFixed(1)} m/s<br>Direction: ${direction.toFixed(0)}°`;
+
+      const point = map.latLngToContainerPoint(e.latlng);
+      tooltip.style.left = `${point.x + 6}px`;
+      tooltip.style.top = `${point.y + 6}px`;
+    });
+  </script>
+</body>
+
+</html>
