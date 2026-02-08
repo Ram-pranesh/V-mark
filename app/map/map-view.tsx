@@ -55,15 +55,48 @@ export default function MapView() {
       })
     }
 
+    // Map module scripts to load after external libraries and config
+    const mapScripts = [
+      "/frontend/scripts/map/map-init.js",
+      "/frontend/scripts/map/map-layers.js",
+      "/frontend/scripts/map/map-controls.js",
+      "/frontend/scripts/map/map-switcher.js",
+      "/frontend/scripts/map/map-time-controls.js",
+      "/frontend/scripts/map/map-weather.js",
+      "/frontend/scripts/map/map-coords.js",
+      "/frontend/scripts/map/map-extensions.js",
+      "/frontend/scripts/map/map-alert.js",
+    ]
+
     async function initializeMap() {
+      // 1. Load external CDN libraries first
       for (const src of externalScripts) {
         await loadScript(src)
       }
-      await loadScript("/frontend/scripts/app-bootstrap.js")
 
-      // Wait for map to be ready
+      // 2. Fetch config from our Next.js API route (replicates app-bootstrap.js logic)
+      const w = window as unknown as Record<string, unknown>
+      try {
+        const res = await fetch("/api/config")
+        if (!res.ok) throw new Error("Config request failed")
+        w.CONFIG = await res.json()
+      } catch {
+        console.warn("Config load failed, using defaults")
+        w.CONFIG = {
+          DEFAULT_CENTER: [78.9629, 20.5937],
+          DEFAULT_ZOOM: 4,
+          OPENWEATHER_KEY: "",
+          FIRMS_MAP_KEY: "",
+        }
+      }
+
+      // 3. Load map module scripts sequentially
+      for (const src of mapScripts) {
+        await loadScript(src)
+      }
+
+      // 4. Wait for the map object to be ready
       const checkMap = () => {
-        const w = window as unknown as Record<string, unknown>
         if (w.map && typeof (w.map as { on?: unknown }).on === "function") {
           const map = w.map as { on: (event: string, cb: () => void) => void; loaded: () => boolean }
           if (map.loaded()) {
