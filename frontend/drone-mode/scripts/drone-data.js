@@ -16,8 +16,8 @@ const DRONE_DB = {
                 [77.2000, 11.4500], [77.0500, 11.4000], [76.9000, 11.5000],
                 [76.9500, 11.6000], [77.0000, 11.7000]
             ],
-            // Increased data points
-            hotspots: { total: 18, severity: { stage3: 1, stage2: 2, stage1: 3, medium: 5, low: 7 } },
+            // Focused sample set covering all severities (<10 inside region)
+            hotspots: { total: 9, severity: { stage3: 1, stage2: 2, stage1: 1, medium: 3, low: 2 } },
             docks: [{ id: "TN-SAT-HR", location: "Hasanur Range Office" }, { id: "TN-SAT-TC", location: "Talamalai Checkpost" }]
         },
         "tn_nilgiris": {
@@ -261,71 +261,85 @@ const generateHighFidelityDrones = () => {
         const forest = DRONE_DB.forests[forestKey];
         if (!forest.docks) return;
 
-        // 1. Construct Turf Polygon
-        // Ensure ring is closed for valid geospatial calculation
+        // 1. Construct Turf Polygon for Validation
         let polyCoords = [...forest.coordinates];
-        const first = polyCoords[0];
-        const last = polyCoords[polyCoords.length - 1];
-        if (first[0] !== last[0] || first[1] !== last[1]) {
-            polyCoords.push(first);
+        if (polyCoords[0][0] !== polyCoords[polyCoords.length - 1][0] || polyCoords[0][1] !== polyCoords[polyCoords.length - 1][1]) {
+            polyCoords.push(polyCoords[0]);
         }
         const forestPoly = turf.polygon([polyCoords]);
-        const bbox = turf.bbox(forestPoly); // Create bounding box for efficiency
+        const bbox = turf.bbox(forestPoly); // Re-added for drone paths
+        const centroid = turf.centroid(forestPoly);
+        const centerCoords = centroid.geometry.coordinates;
 
-        forest.docks.forEach(dock => {
+        // --- Dock Distribution Logic ---
+        const numDocks = forest.docks.length;
+        // Radius for dock placement: ~20-30% from center to edge (rough estimate 0.05 degrees ~ 5km)
+        const placementRadius = 0.04;
+
+        forest.docks.forEach((dock, index) => {
+            // Assign Coordinate if missing
+            if (!dock.coordinates) {
+                let dockPt;
+
+                if (numDocks > 1) {
+                    // Distribute evenly around center (e.g., 2 docks = 0 & 180 degrees)
+                    const angle = (index * (360 / numDocks)) * (Math.PI / 180);
+                    const dx = Math.cos(angle) * placementRadius;
+                    const dy = Math.sin(angle) * placementRadius;
+
+                    let candidate = turf.point([centerCoords[0] + dx, centerCoords[1] + dy]);
+
+                    // Verify inside polygon
+                    if (turf.booleanPointInPolygon(candidate, forestPoly)) {
+                        dockPt = candidate;
+                    } else {
+                        // Fallback: Try closer to center
+                        candidate = turf.point([centerCoords[0] + (dx * 0.5), centerCoords[1] + (dy * 0.5)]);
+                        dockPt = turf.booleanPointInPolygon(candidate, forestPoly) ? candidate : centroid;
+                    }
+                } else {
+                    // Single dock: Place at Centroid
+                    dockPt = centroid;
+                }
+
+                dock.coordinates = dockPt.geometry.coordinates;
+            }
+
             // Fixed number of drones per dock (5 drones)
             const droneCount = 5;
             const dockDrones = [];
             let chargingCount = 0;
 
             for (let i = 1; i <= droneCount; i++) {
-                // New naming format: Full Dock ID + Sequential Number (e.g., TN-SAT-HR-01)
                 const droneId = `${dock.id}-${String(i).padStart(2, '0')}`;
 
-                // --- SMART SPAWN LOGIC ---
-                // Attempt to find a valid coordinate inside the polygon 
-                // We use a loop to "retry" if a random point lands outside
-                let startPt = null;
-                let validStart = false;
+                // Start/end fixed at dock
+                const dockPoint = turf.point(dock.coordinates);
 
-                // Fallback to center if 20 attempts fail (prevents infinite loops)
-                for (let k = 0; k < 20; k++) {
-                    const rnd = turf.randomPoint(1, { bbox: bbox }).features[0];
-                    if (turf.booleanPointInPolygon(rnd, forestPoly)) {
-                        startPt = rnd;
-                        validStart = true;
-                        break;
+                // Build a looping path with two waypoints
+                const makeLeg = (origin, minKm, maxKm) => {
+                    for (let k = 0; k < 20; k++) {
+                        const dist = Math.random() * (maxKm - minKm) + minKm;
+                        const bearing = Math.random() * 360 - 180;
+                        const dest = turf.destination(origin, dist, bearing, { units: 'kilometers' });
+                        if (turf.booleanPointInPolygon(dest, forestPoly)) return dest;
                     }
-                }
-                if (!validStart) startPt = turf.point(forest.center);
+                    return turf.point(forest.center);
+                };
 
-                // --- SMART FLIGHT PATH LOGIC ---
-                // Generate a destination 4-8km away that is ALSO inside the forest
-                let endPt = null;
-                let validEnd = false;
+                const wp1 = makeLeg(dockPoint, 2, 5);
+                const wp2 = makeLeg(wp1, 1.5, 4.5);
 
-                for (let k = 0; k < 30; k++) {
-                    const dist = Math.random() * 4 + 4; // 4 to 8 km range
-                    const bearing = Math.random() * 360 - 180; // Random direction
-                    const dest = turf.destination(startPt, dist, bearing, { units: 'kilometers' });
+                const pathCoords = [
+                    dockPoint.geometry.coordinates,
+                    wp1.geometry.coordinates,
+                    wp2.geometry.coordinates,
+                    dockPoint.geometry.coordinates
+                ];
 
-                    if (turf.booleanPointInPolygon(dest, forestPoly)) {
-                        endPt = dest;
-                        validEnd = true;
-                        break;
-                    }
-                }
-                // If we can't find a valid path inside (e.g., drone is in a corner),
-                // just fly back towards the center of the forest.
-                if (!validEnd) endPt = turf.point(forest.center);
-
-                // Extract Coords
-                const sC = startPt.geometry.coordinates; // [lng, lat]
-                const eC = endPt.geometry.coordinates;
-
-                // --- REALISTIC TELEMETRY ---
-                const speed = Math.floor(Math.random() * 25) + 35; // 35-60 km/h (High end drone)
-                const distKm = turf.distance(startPt, endPt, { units: 'kilometers' });
+                const pathLine = turf.lineString(pathCoords);
+                const distKm = turf.length(pathLine, { units: 'kilometers' });
+                const speed = Math.floor(Math.random() * 25) + 35;
                 const airTimeMin = Math.round((distKm / speed) * 60);
                 const batt = Math.floor(Math.random() * 50) + 40; // 40-90% battery
 
@@ -346,22 +360,25 @@ const generateHighFidelityDrones = () => {
                 // Assign Sequential Video (1-5) ensuring uniqueness per dock
                 const vidId = ((i - 1) % 5) + 1;
 
+                const dockCoords = dockPoint.geometry.coordinates;
+
                 const droneObj = {
                     id: droneId,
                     batt: isCharging ? (Math.random() * 20 + 5) : batt,
                     status: status,
                     video_id: vidId,
                     telemetry: {
-                        lat: isCharging ? sC[1].toFixed(4) : sC[1].toFixed(4),
-                        lng: isCharging ? sC[0].toFixed(4) : sC[0].toFixed(4),
+                        lat: dockCoords[1].toFixed(4),
+                        lng: dockCoords[0].toFixed(4),
                         alt: isCharging ? "0" : (Math.random() * 40 + 80).toFixed(0),
                         speed: isCharging ? 0 : speed,
                         temp: fireDetected ? (400 + Math.random() * 100).toFixed(0) + "°C" : "32°C",
                         fire_event: isCharging ? false : fireDetected
                     },
                     trip: {
-                        startCoords: sC,
-                        endCoords: eC,
+                        startCoords: dockCoords,
+                        endCoords: dockCoords,
+                        pathCoords,
                         distance: distKm.toFixed(2) + " km",
                         duration: airTimeMin + " min"
                     }

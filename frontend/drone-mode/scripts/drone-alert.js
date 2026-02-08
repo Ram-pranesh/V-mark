@@ -20,25 +20,49 @@
         BORDER: '#e1e4e8'
     };
 
-    window.DroneAlertData = {
-        stage1_count: 5,
-        stage2_count: 3,
-        stage3_count: 1,
-        stage1_locations: [
-            { id: 'S-701', latitude: 11.55, longitude: 77.08, confidence: 94.5, brightness: 348.2, city: 'Satyamangalam' },
-            { id: 'S-702', latitude: 20.22, longitude: 79.30, confidence: 91.2, brightness: 335.6, city: 'Tadoba' },
-            { id: 'S-703', latitude: 22.30, longitude: 80.65, confidence: 88.7, brightness: 342.1, city: 'Kanha' }
-        ],
-        stage2_locations: [
-            { id: 'A-201', latitude: 11.60, longitude: 77.15, confidence: 96.0, city: 'Satyamangalam (Zone B)', co: '2450 ppb', pm25: '185 µg/m³', temp: '42.5°C' },
-            { id: 'A-202', latitude: 22.35, longitude: 80.70, confidence: 92.5, city: 'Kanha (Zone C)', co: '1980 ppb', pm25: '142 µg/m³', temp: '39.8°C' }
-        ],
-        stage3_locations: [
-            { id: 'D-101', latitude: 11.52, longitude: 77.05, confidence: 98.4, city: 'Satyamangalam Core', drone_id: 'TN-SAT-HR-01', vision_conf: 98.4, thermal_conf: 97.2, status: 'Active' }
-        ]
-    };
+    window.DroneAlertData = window.DroneAlertData || {};
 
-    const alertData = window.DroneAlertData;
+    function collectLiveHotspots() {
+        const fireData = window.DroneMap && window.DroneMap.fireData;
+        if (!fireData || !Array.isArray(fireData.features)) return null;
+
+        const map = { stage1: [], stage2: [], stage3: [] };
+        fireData.features.forEach(f => {
+            const p = f.properties || {};
+            const sev = (p.severity_label || '').toLowerCase();
+            const entry = {
+                id: p.id || `${sev}-${Math.random().toString(36).slice(2, 7)}`,
+                latitude: f.geometry.coordinates[1],
+                longitude: f.geometry.coordinates[0],
+                confidence: parseFloat((p.confidence || '0').toString().replace('%', '')) || 0,
+                brightness: p.brightness || 0,
+                city: p.city || p.forestKey || 'Unknown',
+                source: p.source || 'Telemetry'
+            };
+            if (sev.includes('stage 3')) map.stage3.push(entry);
+            else if (sev.includes('stage 2')) map.stage2.push(entry);
+            else if (sev.includes('stage 1')) map.stage1.push(entry);
+        });
+        return map;
+    }
+
+    function getAlertData() {
+        const live = collectLiveHotspots();
+        if (live) {
+            return {
+                stage1_count: live.stage1.length,
+                stage2_count: live.stage2.length,
+                stage3_count: live.stage3.length,
+                stage1_locations: live.stage1,
+                stage2_locations: live.stage2,
+                stage3_locations: live.stage3
+            };
+        }
+        // Fallback to seeded values if no live data yet
+        return window.DroneAlertData;
+    }
+
+    let alertData = getAlertData();
 
     const DRONE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="M259-80q-75 0-127-53T80-261q0-75 52-127t127-52q22 0 42.5 5t38.5 14q14-29 15-60t-11-60q-19 10-40 15t-44 5q-75 0-127.5-52.5T80-701q0-75 52.5-127T260-880q75 0 127.5 52T440-701q0 23-5.5 44T419-617q29 12 60 11.5t60-14.5q-9-18-14-38.5t-5-42.5q0-75 52-127t127-52q75 0 128 52t53 127q0 75-53 128t-128 53q-24 0-45.5-6T612-543q-13 30-12 61.5t15 62.5q19-10 40-15.5t44-5.5q75 0 128 52t53 127q0 75-53 128T699-80q-75 0-127-53t-52-128q0-23 5.5-44t15.5-40q-31-14-62.5-15.5T417-349q11 20 17 42t6 46q0 75-53 128T259-80Zm440-520q42 0 71.5-29.5T800-701q0-42-29.5-70.5T699-800q-42 0-70.5 28.5T600-701q0 8 1.5 16.5T605-668l60-60q12-12 28-12t28 12q12 12 12 28t-12 28l-62 63q9 5 19 7t21 2Zm-439-1q10 0 19-2t17-5l-64-64q-12-12-12-28t12-28q12-12 28-12t28 12l65 64q3-8 5-17.5t2-19.5q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29Zm439 441q42 0 71.5-29.5T800-261q0-42-29.5-70.5T699-360q-10 0-19 1.5t-17 4.5l66 66q12 12 12 28t-12 28q-13 12-29 12t-28-12l-65-65q-3 8-5 17t-2 19q0 42 28.5 71.5T699-160Zm-440 0q42 0 71.5-29.5T360-261q0-11-2-21.5t-7-19.5l-70 70q-12 12-28.5 12T224-232q-12-12-12-28t12-28l67-67q-8-2-16-3.5t-16-1.5q-42 0-70.5 28.5T160-261q0 42 28.5 71.5T259-160Zm221-280q17 0 28.5-11.5T520-480q0-17-11.5-28.5T480-520q-17 0-28.5 11.5T440-480q0 17 11.5 28.5T480-440Z"/></svg>`;
 
@@ -83,6 +107,7 @@
     }
 
     function createRoadmap() {
+        alertData = getAlertData();
         return `
             <div style="padding: 30px; display:flex; justify-content:space-around; align-items:flex-start; background: ${COLORS.BG_WHITE}; border-bottom: 1px solid ${COLORS.BORDER};">
                 <div id="stage-1-card" class="stage-roadmap-card" style="display:flex; flex-direction:column; align-items:center; gap:10px; cursor:pointer; transition:0.3s; width:150px;">
@@ -143,18 +168,22 @@
     }
 
     function showStageDetails(stage) {
+        alertData = getAlertData();
         currentView = `stage${stage}`;
         const container = document.getElementById('drone-alert-content-area');
-        if (stage === 1) container.innerHTML = renderStageList(1);
-        else if (stage === 2) container.innerHTML = renderStageList(2);
-        else if (stage === 3) container.innerHTML = renderStage3();
+        if (stage === 1) container.innerHTML = renderStageList(1, alertData.stage1_locations);
+        else if (stage === 2) container.innerHTML = renderStageList(2, alertData.stage2_locations);
+        else if (stage === 3) container.innerHTML = renderStage3(alertData.stage3_locations);
     }
 
-    function renderStageList(stage) {
-        const list = stage === 1 ? alertData.stage1_locations : alertData.stage2_locations;
+    function renderStageList(stage, list) {
+        const items = Array.isArray(list) ? list : [];
         const color = stage === 1 ? COLORS.ORANGE : COLORS.BLUE;
         let html = `<div style="display:grid; gap:12px;">`;
-        list.forEach((loc) => {
+        if (!items.length) {
+            html += `<div style="color:${COLORS.TEXT_GRAY}; font-size:13px;">No hotspots available.</div>`;
+        }
+        items.forEach((loc) => {
             html += `
                 <div style="background:#fff; border:1px solid ${COLORS.BORDER}; border-left:5px solid ${color}; border-radius:8px; padding:15px; display:flex; justify-content:space-between; align-items:center; transition:0.2s;">
                     <div style="display:flex; align-items:center; gap:25px; flex:1;">
@@ -173,9 +202,13 @@
         return html;
     }
 
-    function renderStage3() {
+    function renderStage3(list) {
+        const items = Array.isArray(list) ? list : [];
         let html = `<div style="display:grid; gap:20px;">`;
-        alertData.stage3_locations.forEach(loc => {
+        if (!items.length) {
+            html += `<div style="color:${COLORS.TEXT_GRAY}; font-size:13px;">No hotspots available.</div>`;
+        }
+        items.forEach(loc => {
             html += `
                 <div style="background:#fff; border:1px solid ${COLORS.BORDER}; border-radius:12px; padding:25px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
                     <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:20px;">
@@ -448,10 +481,9 @@
             document.body.appendChild(win);
 
             if (stage === 2) {
-                // Render initial default (Temp)
                 this.updateStage2Chart(id);
             } else {
-                this.renderGraph(id, stage, `details-chart-${id}`, 'bar');
+                this.renderGraph(id, stage, `details-chart-${id}`, 'line');
             }
         },
 
@@ -473,6 +505,35 @@
             this.renderGraph(id, 2, `details-chart-${id}`, 'line', d.data, d.label);
         },
 
+        // Compute current average confidence across all stages
+        getAverageConfidence: function () {
+            const current = getAlertData();
+            const all = [];
+            [current.stage1_locations, current.stage2_locations, current.stage3_locations].forEach(list => {
+                if (Array.isArray(list)) {
+                    list.forEach(item => {
+                        if (typeof item.confidence === 'number' && !Number.isNaN(item.confidence)) {
+                            all.push(item.confidence);
+                        }
+                    });
+                }
+            });
+
+            const avg = all.length ? all.reduce((a, b) => a + b, 0) / all.length : 85;
+            return Math.round(avg * 10) / 10;
+        },
+
+        // Build an increasing 5-point series ending at the current average
+        computeAverageConfidenceSeries: function () {
+            const avg = this.getAverageConfidence();
+            const deltas = [-12, -8, -4, -2, 0];
+            return deltas.map(d => {
+                const v = avg + d;
+                const clamped = v < 0 ? 0 : v;
+                return Math.round(clamped * 10) / 10;
+            });
+        },
+
         renderGraph: function (id, stage, canvasId, forcedType = null, forcedData = null, forcedLabel = null) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
@@ -481,8 +542,8 @@
             // Cleanup existing charts
             if (canvas.chart) canvas.chart.destroy();
 
-            let type = forcedType || (stage === 1 ? 'bar' : 'bar');
-            let data = forcedData ? forcedData : (stage === 1 ? [78, 82, 85, 89, 94.5] : [85, 92, 78, 45, 88, 72]); // Default data
+            let type = forcedType || 'line';
+            let data = forcedData ? forcedData : (stage === 1 ? this.computeAverageConfidenceSeries() : [85, 92, 78, 45, 88, 72]);
             let labels = stage === 2 ? ['5d', '4d', '3d', '2d', 'Today'] : ['5d ago', '4d ago', '3d ago', '2d ago', 'Today'];
             let labelText = forcedLabel ? forcedLabel : 'Confidence %';
 

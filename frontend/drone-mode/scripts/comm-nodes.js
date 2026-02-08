@@ -56,22 +56,44 @@ const COMM_NODES_SYSTEM = {
         for (let i = 0; i < count; i++) {
             const distance = i * spacing;
             const edgePoint = turf.along(line, distance, { units: 'kilometers' });
+            const [edgeLng, edgeLat] = edgePoint.geometry.coordinates; // Track edge anchor
 
             // Calculate centroid of the polygon
             const centroid = turf.centroid(polygon);
             const [centLng, centLat] = centroid.geometry.coordinates;
-            const [edgeLng, edgeLat] = edgePoint.geometry.coordinates;
+            // Move point inward (10-25% from edge towards center) to keep them near boundary
+            // Retry logic to ensure point is inside polygon
+            let validPoint = false;
+            let finalLng = edgeLng;
+            let finalLat = edgeLat;
 
-            // Move point inward (70-85% from edge towards center)
-            const inwardFactor = 0.70 + Math.random() * 0.15;
-            const lng = edgeLng + (centLng - edgeLng) * inwardFactor;
-            const lat = edgeLat + (centLat - edgeLat) * inwardFactor;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                // Hug the boundary: 0.02 to 0.08, slight grow per attempt
+                const inwardFactor = 0.02 + (Math.random() * 0.06) + (attempt * 0.03);
+                const lng = edgeLng + (centLng - edgeLng) * inwardFactor;
+                const lat = edgeLat + (centLat - edgeLat) * inwardFactor;
+
+                const pt = turf.point([lng, lat]);
+                if (turf.booleanPointInPolygon(pt, polygon)) {
+                    finalLng = lng;
+                    finalLat = lat;
+                    validPoint = true;
+                    break;
+                }
+            }
+
+            // Fallback: If still outside (complex shape), keep closer (15%)
+            if (!validPoint) {
+                const inwardFactor = 0.15;
+                finalLng = edgeLng + (centLng - edgeLng) * inwardFactor;
+                finalLat = edgeLat + (centLat - edgeLat) * inwardFactor;
+            }
 
             nodes.push({
                 id: `${forestKey.toUpperCase()}-NODE-${String(i + 1).padStart(2, '0')}`,
                 forestKey: forestKey,
-                lat: lat,
-                lng: lng,
+                lat: finalLat,
+                lng: finalLng,
                 radius: this.coverageRadius,
                 status: 'active',
                 connections: []
@@ -81,53 +103,25 @@ const COMM_NODES_SYSTEM = {
         return nodes;
     },
 
-    // Generate mesh network links
+    // Generate complete mesh links (each node connects to every other)
     generateMeshLinks: function (nodes, forestKey) {
-        // Connect each node to its neighbors and create a mesh
         for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i];
+                const b = nodes[j];
 
-            // Connect to next node (circular)
-            const nextIdx = (i + 1) % nodes.length;
-            const nextNode = nodes[nextIdx];
+                this.links.push({
+                    id: `LINK-${a.id}-${b.id}`,
+                    from: a.id,
+                    to: b.id,
+                    fromCoords: [a.lng, a.lat],
+                    toCoords: [b.lng, b.lat],
+                    forestKey: forestKey,
+                    type: 'primary'
+                });
 
-            this.links.push({
-                id: `LINK-${node.id}-${nextNode.id}`,
-                from: node.id,
-                to: nextNode.id,
-                fromCoords: [node.lng, node.lat],
-                toCoords: [nextNode.lng, nextNode.lat],
-                forestKey: forestKey,
-                type: 'primary'
-            });
-
-            node.connections.push(nextNode.id);
-
-            // Also connect to node across (for mesh redundancy)
-            if (nodes.length >= 6) {
-                const acrossIdx = (i + Math.floor(nodes.length / 2)) % nodes.length;
-                const acrossNode = nodes[acrossIdx];
-
-                // Only add if distance is reasonable (< 50km)
-                const dist = turf.distance(
-                    turf.point([node.lng, node.lat]),
-                    turf.point([acrossNode.lng, acrossNode.lat]),
-                    { units: 'kilometers' }
-                );
-
-                if (dist < 50 && !node.connections.includes(acrossNode.id)) {
-                    this.links.push({
-                        id: `LINK-${node.id}-${acrossNode.id}`,
-                        from: node.id,
-                        to: acrossNode.id,
-                        fromCoords: [node.lng, node.lat],
-                        toCoords: [acrossNode.lng, acrossNode.lat],
-                        forestKey: forestKey,
-                        type: 'secondary'
-                    });
-
-                    node.connections.push(acrossNode.id);
-                }
+                a.connections.push(b.id);
+                b.connections.push(a.id);
             }
         }
     },
@@ -165,17 +159,16 @@ const COMM_NODES_SYSTEM = {
             // Add node layer (hidden by default)
             map.addLayer({
                 id: 'comm-nodes-layer',
-                type: 'circle',
+                type: 'symbol',
                 source: 'comm-nodes',
-                paint: {
-                    'circle-radius': 8,
-                    'circle-color': '#4aa8ff',
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff',
-                    'circle-opacity': 0.9
-                },
                 layout: {
+                    'icon-image': 'node-icon',
+                    'icon-size': 0.7,
+                    'icon-allow-overlap': true,
                     'visibility': 'none'
+                },
+                paint: {
+                    'icon-opacity': 0.9
                 }
             });
         }
@@ -213,28 +206,10 @@ const COMM_NODES_SYSTEM = {
                 type: 'line',
                 source: 'comm-links',
                 paint: {
-                    'line-color': [
-                        'match',
-                        ['get', 'type'],
-                        'primary', '#4aa8ff',
-                        'secondary', '#ff6b35',
-                        '#888888'
-                    ],
-                    'line-width': [
-                        'match',
-                        ['get', 'type'],
-                        'primary', 2,
-                        'secondary', 1.5,
-                        1
-                    ],
-                    'line-opacity': 0.6,
-                    'line-dasharray': [
-                        'match',
-                        ['get', 'type'],
-                        'primary', ['literal', [1, 0]],
-                        'secondary', ['literal', [2, 2]],
-                        ['literal', [1, 0]]
-                    ]
+                    'line-color': '#3fb36a',
+                    'line-width': 1.5,
+                    'line-opacity': 0.8,
+                    'line-dasharray': ['literal', [1, 0]]
                 },
                 layout: {
                     'visibility': 'none'
@@ -277,8 +252,8 @@ const COMM_NODES_SYSTEM = {
                 type: 'fill',
                 source: 'comm-coverage',
                 paint: {
-                    'fill-color': '#4aa8ff',
-                    'fill-opacity': 0.1
+                    'fill-color': '#3fb36a',
+                    'fill-opacity': 0.22
                 },
                 layout: {
                     'visibility': 'none'
@@ -291,10 +266,10 @@ const COMM_NODES_SYSTEM = {
                 type: 'line',
                 source: 'comm-coverage',
                 paint: {
-                    'line-color': '#4aa8ff',
-                    'line-width': 1,
-                    'line-opacity': 0.4,
-                    'line-dasharray': [3, 3]
+                    'line-color': '#2d8b52',
+                    'line-width': 1.5,
+                    'line-opacity': 0.7,
+                    'line-dasharray': [2, 2]
                 },
                 layout: {
                     'visibility': 'none'
@@ -328,64 +303,40 @@ const COMM_NODES_SYSTEM = {
         }
     },
 
-    // Forest-specific toggles
-    toggleLinksForForest: function (map, forestKey, visible) {
+    // Initialize nodes for forest (Show Nodes, Hide Links by default)
+    initializeForestNodes: function (map, forestKey) {
         if (!map) return;
 
-        // First hide all
-        this.toggleLinks(map, false);
-
-        if (!visible) return;
-
-        // Filter and show only this forest's nodes and links
+        // 1. Filter Data
         const forestNodes = this.nodes[forestKey] || [];
         const forestLinks = this.links.filter(link => link.forestKey === forestKey);
 
-        // Create filtered GeoJSON
         const nodeFeatures = forestNodes.map(node => ({
             type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [node.lng, node.lat]
-            },
-            properties: {
-                id: node.id,
-                forestKey: node.forestKey,
-                status: node.status,
-                radius: node.radius
-            }
+            geometry: { type: 'Point', coordinates: [node.lng, node.lat] },
+            properties: { id: node.id, forestKey: node.forestKey, status: node.status, radius: node.radius }
         }));
 
         const linkFeatures = forestLinks.map(link => ({
             type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: [link.fromCoords, link.toCoords]
-            },
-            properties: {
-                id: link.id,
-                from: link.from,
-                to: link.to,
-                forestKey: link.forestKey,
-                type: link.type
-            }
+            geometry: { type: 'LineString', coordinates: [link.fromCoords, link.toCoords] },
+            properties: { id: link.id, from: link.from, to: link.to, forestKey: link.forestKey, type: link.type }
         }));
 
-        // Update sources
-        if (map.getSource('comm-nodes')) {
-            map.getSource('comm-nodes').setData({ type: 'FeatureCollection', features: nodeFeatures });
-        }
-        if (map.getSource('comm-links')) {
-            map.getSource('comm-links').setData({ type: 'FeatureCollection', features: linkFeatures });
-        }
+        // 2. Update Sources
+        if (map.getSource('comm-nodes')) map.getSource('comm-nodes').setData({ type: 'FeatureCollection', features: nodeFeatures });
+        if (map.getSource('comm-links')) map.getSource('comm-links').setData({ type: 'FeatureCollection', features: linkFeatures });
 
-        // Show layers
-        if (map.getLayer('comm-links-layer')) {
-            map.setLayoutProperty('comm-links-layer', 'visibility', 'visible');
-        }
-        if (map.getLayer('comm-nodes-layer')) {
-            map.setLayoutProperty('comm-nodes-layer', 'visibility', 'visible');
-        }
+        // 3. Show Nodes Only
+        if (map.getLayer('comm-links-layer')) map.setLayoutProperty('comm-links-layer', 'visibility', 'none');
+        if (map.getLayer('comm-nodes-layer')) map.setLayoutProperty('comm-nodes-layer', 'visibility', 'visible');
+    },
+
+    // Toggle Link Lines Visibility Only
+    toggleLinkLayer: function (map, visible) {
+        if (!map) return;
+        const visibility = visible ? 'visible' : 'none';
+        if (map.getLayer('comm-links-layer')) map.setLayoutProperty('comm-links-layer', 'visibility', visibility);
     },
 
     toggleCoverageForForest: function (map, forestKey, visible) {
@@ -427,8 +378,10 @@ const COMM_NODES_SYSTEM = {
             map.setLayoutProperty('comm-coverage-outline', 'visibility', 'visible');
         }
 
-        // Also show nodes
-        this.toggleLinksForForest(map, forestKey, true);
+        // Also ensure nodes are visible
+        if (map.getLayer('comm-nodes-layer')) {
+            map.setLayoutProperty('comm-nodes-layer', 'visibility', 'visible');
+        }
     }
 };
 

@@ -127,6 +127,17 @@ const UI = {
         // C. Fly Map to Location
         if (window.map && data.center) {
             window.map.flyTo({ center: data.center, zoom: 10, pitch: 0 });
+
+            // Show Docks ONLY for this Forest
+            if (window.map.getLayer('dock-stations-layer')) {
+                window.map.setLayoutProperty('dock-stations-layer', 'visibility', 'visible');
+                window.map.setFilter('dock-stations-layer', ['==', 'forestKey', forestKey]);
+            }
+
+            // Hide any previous nodes/links
+            if (window.COMM_NODES_SYSTEM) {
+                window.COMM_NODES_SYSTEM.toggleLinks(window.map, false);
+            }
         }
     },
 
@@ -147,6 +158,12 @@ const UI = {
 
         if (!dockForestKey) return;
 
+        // Ensure proper map context (Show Docks for this forest)
+        if (window.map && window.map.getLayer('dock-stations-layer')) {
+            window.map.setLayoutProperty('dock-stations-layer', 'visibility', 'visible');
+            window.map.setFilter('dock-stations-layer', ['==', 'forestKey', dockForestKey]);
+        }
+
         const forest = window.DRONE_DB.forests[dockForestKey];
 
         // Calculate threat statistics for this region
@@ -160,8 +177,8 @@ const UI = {
             panel.style.cssText = `
                 position: fixed;
                 bottom: -100%;
-                left: 320px;
-                right: 420px;
+                left: 280px;
+                right: 320px;
                 background: rgba(10, 10, 10, 0.98);
                 border-top: 1px solid #2a2a2a;
                 border-left: 1px solid #2a2a2a;
@@ -176,73 +193,82 @@ const UI = {
         }
 
         panel.innerHTML = `
-            <div style="max-width: 1400px; margin: 0 auto;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
-                    <div style="color: #ff6b35; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px;">
-                        Dock: ${dockId}
+                <div style="max-width: 1400px; margin: 0 auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                        <div style="display: flex; align-items: center; gap: 20px;">
+                            <div style="color: #ff6b35; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.5px;">
+                                Dock: ${dockId}
+                            </div>
+                            
+                            <!-- Legends -->
+                            <div style="display: flex; gap: 16px; align-items: center; margin-left: 20px; border-left: 1px solid #333; padding-left: 20px;">
+                                 <div style="display: flex; align-items: center; gap: 6px; color: #4aa8ff; font-size: 0.75rem; font-weight: 600; opacity: 0.8;">
+                                      <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="#4aa8ff"><path d="M480-360q-50 0-85-35t-35-85q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35ZM324-111.5Q251-143 197-197t-85.5-127Q80-397 80-480t31.5-156Q143-709 197-763t127-85.5Q397-880 480-880t156 31.5Q709-817 763-763t85.5 127Q880-563 880-480t-31.5 156Q817-251 763-197t-127 85.5Q563-80 480-80t-156-31.5ZM480-160q133 0 226.5-93.5T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160Zm0-320Zm141.5 141.5Q680-397 680-480t-58.5-141.5Q563-680 480-680t-141.5 58.5Q280-563 280-480t58.5 141.5Q397-280 480-280t141.5-58.5Z"/></svg>
+                                      LORA node
+                                 </div>
+                                 <div style="display: flex; align-items: center; gap: 6px; color: #ff6b35; font-size: 0.75rem; font-weight: 600; opacity: 0.8;">
+                                      <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="#ff6b35"><path d="M120-120v-80l170-49 62-520q4-30 26-50.5t53-20.5h98q31 0 53 20.5t26 50.5l62 520 170 49v80H120Zm320-120h80v-480q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v480Z"/></svg>
+                                      DOCK station
+                                 </div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 20px; align-items: center;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">
+                                <input type="checkbox" id="dock-coverage-check" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4aa8ff;">
+                                <span>COVERAGE</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">
+                                <input type="checkbox" id="dock-linking-check" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4aa8ff;">
+                                <span>LINKING</span>
+                            </label>
+                            <button onclick="DroneUI.closeDockPanel()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 1.5rem; padding: 0; margin-left: 10px;">✕</button>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 20px; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">
-                            <input type="checkbox" id="dock-coverage-check" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4aa8ff;">
-                            <span>COVERAGE</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;">
-                            <input type="checkbox" id="dock-linking-check" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4aa8ff;">
-                            <span>LINKING</span>
-                        </label>
-                        <button onclick="DroneUI.closeDockPanel()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 1.5rem; padding: 0; margin-left: 10px;">✕</button>
+                    
+                    <div style="border-top: 1px solid #2a2a2a; padding-top: 18px;">
+                        <div style="color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px; font-weight: 600;">
+                            ACTIVE THREATS & NETWORK STATUS
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;">
+                            <div style="background: #1a1a1a; padding: 16px; border-radius: 6px; text-align: center;">
+                                <div style="color: #888; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">TOTAL</div>
+                                <div style="color: #fff; font-size: 1.8rem; font-weight: 700;">${stats.total}</div>
+                            </div>
+                            <div style="background: rgba(122, 184, 122, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(122, 184, 122, 0.3);">
+                                <div style="color: #7AB87A; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">LOW</div>
+                                <div style="color: #7AB87A; font-size: 1.8rem; font-weight: 700;">${stats.low}</div>
+                            </div>
+                            <div style="background: rgba(217, 199, 102, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(217, 199, 102, 0.3);">
+                                <div style="color: #D9C766; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">MEDIUM</div>
+                                <div style="color: #D9C766; font-size: 1.8rem; font-weight: 700;">${stats.medium}</div>
+                            </div>
+                            <div style="background: rgba(217, 160, 102, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(217, 160, 102, 0.3);">
+                                <div style="color: #D9A066; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 1</div>
+                                <div style="color: #D9A066; font-size: 1.8rem; font-weight: 700;">${stats.stage1}</div>
+                            </div>
+                            <div style="background: rgba(107, 142, 201, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(107, 142, 201, 0.3);">
+                                <div style="color: #6B8EC9; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 2</div>
+                                <div style="color: #6B8EC9; font-size: 1.8rem; font-weight: 700;">${stats.stage2}</div>
+                            </div>
+                            <div style="background: rgba(201, 74, 74, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(201, 74, 74, 0.3);">
+                                <div style="color: #C94A4A; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 3</div>
+                                <div style="color: #C94A4A; font-size: 1.8rem; font-weight: 700;">${stats.stage3}</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
-                <div style="border-top: 1px solid #2a2a2a; padding-top: 18px;">
-                    <div style="color: #666; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px; font-weight: 600;">
-                        ACTIVE THREATS & NETWORK STATUS
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;">
-                        <div style="background: #1a1a1a; padding: 16px; border-radius: 6px; text-align: center;">
-                            <div style="color: #888; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">TOTAL</div>
-                            <div style="color: #fff; font-size: 1.8rem; font-weight: 700;">${stats.total}</div>
-                        </div>
-                        <div style="background: rgba(122, 184, 122, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(122, 184, 122, 0.3);">
-                            <div style="color: #7AB87A; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">LOW</div>
-                            <div style="color: #7AB87A; font-size: 1.8rem; font-weight: 700;">${stats.low}</div>
-                        </div>
-                        <div style="background: rgba(217, 199, 102, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(217, 199, 102, 0.3);">
-                            <div style="color: #D9C766; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">MEDIUM</div>
-                            <div style="color: #D9C766; font-size: 1.8rem; font-weight: 700;">${stats.medium}</div>
-                        </div>
-                        <div style="background: rgba(217, 160, 102, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(217, 160, 102, 0.3);">
-                            <div style="color: #D9A066; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 1</div>
-                            <div style="color: #D9A066; font-size: 1.8rem; font-weight: 700;">${stats.stage1}</div>
-                        </div>
-                        <div style="background: rgba(107, 142, 201, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(107, 142, 201, 0.3);">
-                            <div style="color: #6B8EC9; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 2</div>
-                            <div style="color: #6B8EC9; font-size: 1.8rem; font-weight: 700;">${stats.stage2}</div>
-                        </div>
-                        <div style="background: rgba(201, 74, 74, 0.12); padding: 16px; border-radius: 6px; text-align: center; border: 1px solid rgba(201, 74, 74, 0.3);">
-                            <div style="color: #C94A4A; font-size: 0.7rem; margin-bottom: 8px; letter-spacing: 1px;">STAGE 3</div>
-                            <div style="color: #C94A4A; font-size: 1.8rem; font-weight: 700;">${stats.stage3}</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 20px; display: flex; gap: 12px; align-items: center;">
-                    <button onclick="DroneUI.viewLoraNode()" style="background: rgba(74, 168, 255, 0.1); border: 1px solid #4aa8ff; color: #4aa8ff; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#4aa8ff"><path d="M480-360q-50 0-85-35t-35-85q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35ZM324-111.5Q251-143 197-197t-85.5-127Q80-397 80-480t31.5-156Q143-709 197-763t127-85.5Q397-880 480-880t156 31.5Q709-817 763-763t85.5 127Q880-563 880-480t-31.5 156Q817-251 763-197t-127 85.5Q563-80 480-80t-156-31.5ZM480-160q133 0 226.5-93.5T800-480q0-133-93.5-226.5T480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160Zm0-320Zm141.5 141.5Q680-397 680-480t-58.5-141.5Q563-680 480-680t-141.5 58.5Q280-563 280-480t58.5 141.5Q397-280 480-280t141.5-58.5Z"/></svg>
-                        LORA NODE
-                    </button>
-                    <button onclick="DroneUI.viewDockStation()" style="background: rgba(74, 168, 255, 0.1); border: 1px solid #4aa8ff; color: #4aa8ff; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#4aa8ff"><path d="M120-120v-80l170-49 62-520q4-30 26-50.5t53-20.5h98q31 0 53 20.5t26 50.5l62 520 170 49v80H120Zm320-120h80v-480q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v480Z"/></svg>
-                        DOCK STATION
-                    </button>
-                </div>
-            </div>
-        `;
+            `;
 
         // Slide up the panel
         setTimeout(() => {
             panel.style.bottom = '0';
         }, 50);
+
+        // Initialize Nodes (Visible) & Links (Hidden) specific to this forest
+        if (window.COMM_NODES_SYSTEM && window.map) {
+            COMM_NODES_SYSTEM.initializeForestNodes(window.map, dockForestKey);
+        }
 
         // Store forest key for node toggling
         panel.dataset.forestKey = dockForestKey;
@@ -253,12 +279,18 @@ const UI = {
             const linkingCheck = document.getElementById('dock-linking-check');
 
             if (coverageCheck) {
+                coverageCheck.checked = false; // Default: Unchecked
+                this.toggleDockCoverage(dockForestKey, false); // Default: Hidden
+
                 coverageCheck.addEventListener('change', (e) => {
                     this.toggleDockCoverage(dockForestKey, e.target.checked);
                 });
             }
 
             if (linkingCheck) {
+                linkingCheck.checked = true; // Show mesh links by default when dock opens
+                this.toggleDockLinking(dockForestKey, true);
+
                 linkingCheck.addEventListener('change', (e) => {
                     this.toggleDockLinking(dockForestKey, e.target.checked);
                 });
@@ -405,10 +437,26 @@ const UI = {
         // Flying Mode: Normal telemetry
         this.state.simProgress = Math.random() * 0.6 + 0.2;
 
-        const start = droneData.trip.startCoords;
-        const end = droneData.trip.endCoords;
+        const pathCoords = Array.isArray(droneData.trip.pathCoords) && droneData.trip.pathCoords.length >= 2
+            ? droneData.trip.pathCoords
+            : [droneData.trip.startCoords, droneData.trip.endCoords];
+
+        const start = pathCoords[0];
+        const end = pathCoords[pathCoords.length - 1];
         const baseSpeed = droneData.telemetry.speed;
         const baseAlt = parseInt(droneData.telemetry.alt);
+
+        // Precompute path segment lengths for smooth interpolation
+        const segments = [];
+        let totalLen = 0;
+        for (let i = 0; i < pathCoords.length - 1; i++) {
+            const a = pathCoords[i];
+            const b = pathCoords[i + 1];
+            const len = turf.distance(turf.point(a), turf.point(b), { units: 'kilometers' });
+            totalLen += len;
+            segments.push({ a, b, len, acc: totalLen });
+        }
+        this.state._pathSegments = segments;
 
         this.state.simInterval = setInterval(() => {
             const step = (baseSpeed / 10000);
@@ -416,8 +464,19 @@ const UI = {
             if (this.state.simProgress >= 1.0) this.state.simProgress = 0.0;
 
             const p = this.state.simProgress;
-            const curLng = start[0] + (end[0] - start[0]) * p;
-            const curLat = start[1] + (end[1] - start[1]) * p;
+            const targetDist = p * totalLen;
+            let curLng = start[0];
+            let curLat = start[1];
+            for (let s = 0; s < segments.length; s++) {
+                const seg = segments[s];
+                const prevAcc = s === 0 ? 0 : segments[s - 1].acc;
+                if (targetDist <= seg.acc) {
+                    const segT = seg.len === 0 ? 0 : (targetDist - prevAcc) / seg.len;
+                    curLng = seg.a[0] + (seg.b[0] - seg.a[0]) * segT;
+                    curLat = seg.a[1] + (seg.b[1] - seg.a[1]) * segT;
+                    break;
+                }
+            }
 
             let curSpeed = (baseSpeed + (Math.random() * 10 - 5));
             curSpeed = Math.max(0, curSpeed).toFixed(1);
@@ -458,10 +517,9 @@ const UI = {
         if (show) {
             this.clearTempMarkers();
             const dData = window.DRONE_DB.drones[this.state.selectedDrone];
-            const start = dData.trip.startCoords;
-            const end = dData.trip.endCoords;
+            const coords = Array.isArray(dData.trip.pathCoords) ? dData.trip.pathCoords : [dData.trip.startCoords, dData.trip.endCoords];
 
-            const geojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: [start, end] } };
+            const geojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } };
 
             if (map.getSource('drone-path')) {
                 map.getSource('drone-path').setData(geojson);
@@ -472,10 +530,11 @@ const UI = {
                     paint: { 'line-color': '#ff6b35', 'line-width': 3, 'line-dasharray': [2, 1] }
                 });
             }
-            this.addPathLabel(start, "Start");
-            this.addPathLabel(end, "End");
+            this.addPathLabel(coords[0], "Dock");
+            this.addPathLabel(coords[coords.length - 1], "Dock");
 
-            const bounds = new maplibregl.LngLatBounds(start, end);
+            const bounds = new maplibregl.LngLatBounds();
+            coords.forEach(c => bounds.extend(c));
             map.fitBounds(bounds, { padding: 50 });
         } else {
             if (map.getLayer('drone-path-line')) map.removeLayer('drone-path-line');
@@ -491,11 +550,10 @@ const UI = {
 
         if (show) {
             const dData = window.DRONE_DB.drones[this.state.selectedDrone];
-            const c = dData.trip.startCoords;
-            const d = 0.015;
-            const poly = [[c[0] - d, c[1] - d], [c[0] + d, c[1] - d], [c[0] + d, c[1] + d], [c[0] - d, c[1] + d], [c[0] - d, c[1] - d]];
-
-            const geojson = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [poly] } };
+            const coords = Array.isArray(dData.trip.pathCoords) ? dData.trip.pathCoords : [dData.trip.startCoords, dData.trip.endCoords];
+            const line = turf.lineString(coords);
+            const buffered = turf.buffer(line, 0.35, { units: 'kilometers' });
+            const geojson = buffered || line;
 
             if (map.getSource('drone-cov')) {
                 map.getSource('drone-cov').setData(geojson);
@@ -503,11 +561,11 @@ const UI = {
                 map.addSource('drone-cov', { type: 'geojson', data: geojson });
                 map.addLayer({
                     id: 'drone-cov-fill', type: 'fill', source: 'drone-cov',
-                    paint: { 'fill-color': '#00C851', 'fill-opacity': 0.1 }
+                    paint: { 'fill-color': '#3fb36a', 'fill-opacity': 0.25 }
                 });
                 map.addLayer({
                     id: 'drone-cov-line', type: 'line', source: 'drone-cov',
-                    paint: { 'line-color': '#00C851', 'line-width': 1 }
+                    paint: { 'line-color': '#2d8b52', 'line-width': 1.2 }
                 });
             }
         } else {
@@ -573,9 +631,9 @@ const UI = {
                 item.onmouseout = () => { item.style.background = '#222'; item.style.color = '#ccc'; };
 
                 item.innerHTML = `
-                    <div style="font-size:0.95rem; font-weight:600;">${f.name}</div>
-                    <div style="font-size:0.8rem; color:#888;">${f.location}</div>
-                `;
+                <div style="font-size:0.95rem; font-weight:600;">${f.name}</div>
+                <div style="font-size:0.8rem; color:#888;">${f.location}</div>
+        `;
 
                 item.onclick = () => {
                     this.openForestPanel(key);
@@ -694,7 +752,15 @@ const UI = {
             const isCharging = dData.status === 'Charging';
             const videoFile = vidMap[dData.video_id] || 'drone-gif.mp4';
 
-            console.log(`Drone ${dData.id}: video_id=${dData.video_id}, file=${videoFile}, status=${dData.status}`);
+            // Uniqueness Filters
+            const filters = [
+                'none',
+                'contrast(1.15) saturate(1.1)',
+                'brightness(1.05) hue-rotate(15deg)',
+                'sepia(0.2) contrast(1.1)',
+                'brightness(0.95) hue-rotate(-10deg) saturate(1.2)'
+            ];
+            const filter = filters[(dData.video_id - 1) % filters.length] || 'none';
 
             const gridItem = document.createElement('div');
             gridItem.style.cssText = `
@@ -705,16 +771,6 @@ const UI = {
                 display: flex;
                 flex-direction: column;
             `;
-
-            // Uniqueness Filters
-            const filters = [
-                'none',
-                'contrast(1.15) saturate(1.1)',
-                'brightness(1.05) hue-rotate(15deg)',
-                'sepia(0.2) contrast(1.1)',
-                'brightness(0.95) hue-rotate(-10deg) saturate(1.2)'
-            ];
-            const filter = filters[(dData.video_id - 1) % filters.length] || 'none';
 
             gridItem.innerHTML = `
                 <div style="padding: 10px; background: #111; border-bottom: 1px solid #1f1f1f; display: flex; justify-content: space-between; align-items: center;">
@@ -735,7 +791,6 @@ const UI = {
                     <span style="color: #888;">Speed: <span style="color: #fff;">${isCharging ? '--' : dData.telemetry.speed + ' km/h'}</span></span>
                 </div>
             `;
-
             grid.appendChild(gridItem);
         });
 
@@ -794,10 +849,30 @@ const UI = {
     },
 
     calculateThreatStats(forestKey) {
-        const forest = window.DRONE_DB.forests[forestKey];
-        if (!forest || !forest.hotspots) {
-            return { total: 0, low: 0, medium: 0, stage1: 0, stage2: 0, stage3: 0 };
+        const baseStats = { total: 0, low: 0, medium: 0, stage1: 0, stage2: 0, stage3: 0 };
+
+        // Prefer live fire data so stats mirror the map exactly
+        const fireData = window.DroneMap && window.DroneMap.fireData;
+        if (fireData && Array.isArray(fireData.features)) {
+            const stats = { ...baseStats };
+            fireData.features.forEach(f => {
+                const p = f.properties || {};
+                if (p.forestKey !== forestKey || !p.insideForest) return;
+
+                stats.total += 1;
+                const sev = (p.severity_label || '').toLowerCase();
+                if (sev.includes('low')) stats.low += 1;
+                else if (sev.includes('medium')) stats.medium += 1;
+                else if (sev.includes('stage 1')) stats.stage1 += 1;
+                else if (sev.includes('stage 2')) stats.stage2 += 1;
+                else if (sev.includes('stage 3')) stats.stage3 += 1;
+            });
+            return stats;
         }
+
+        // Fallback to configured counts
+        const forest = window.DRONE_DB.forests[forestKey];
+        if (!forest || !forest.hotspots) return baseStats;
 
         const severity = forest.hotspots.severity;
         return {
@@ -842,13 +917,7 @@ const UI = {
 
     toggleDockLinking(forestKey, show) {
         if (!window.COMM_NODES_SYSTEM || !window.map) return;
-
-        if (show) {
-            // Show only nodes and links for this forest
-            COMM_NODES_SYSTEM.toggleLinksForForest(window.map, forestKey, true);
-        } else {
-            COMM_NODES_SYSTEM.toggleLinks(window.map, false);
-        }
+        COMM_NODES_SYSTEM.toggleLinkLayer(window.map, show);
     },
 
     viewLoraNode() {

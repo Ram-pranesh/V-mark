@@ -7,3 +7,4 @@ requests-cache
 retry-requests
 pandas
 numpy
+gunicorn==21.2.0
